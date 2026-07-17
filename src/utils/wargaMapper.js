@@ -80,6 +80,70 @@ export function extractDesil(value) {
     return match ? Number(match[1]) : null;
 }
 
+// "La Ode Samsuddin" -> "LO" (huruf pertama kata ke-1 + kata ke-2)
+export function getInitials(nama) {
+    if (!nama) return null;
+    const parts = String(nama).trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return null;
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+}
+
+// Hitung usia (tahun penuh) dari tanggal lahir ke waktu sekarang
+export function hitungUsia(tanggalLahir) {
+    if (!tanggalLahir) return null;
+    const now = new Date();
+    const lahir = new Date(tanggalLahir);
+    if (Number.isNaN(lahir.getTime())) return null;
+
+    let usia = now.getUTCFullYear() - lahir.getUTCFullYear();
+    const belumUlangTahun =
+        now.getUTCMonth() < lahir.getUTCMonth() ||
+        (now.getUTCMonth() === lahir.getUTCMonth() && now.getUTCDate() < lahir.getUTCDate());
+    if (belumUlangTahun) usia--;
+    return usia;
+}
+
+// "DESIL 4" -> "Desil 4", null kalau kosong/tidak dikenali
+export function formatDesilLabel(value) {
+    const n = extractDesil(value);
+    return n ? `Desil ${n}` : null;
+}
+
+const KABUPATEN_LABEL = {
+    KOTA_PALU: "Kota Palu",
+    DONGGALA: "Kabupaten Donggala",
+    SIGI: "Kabupaten Sigi",
+    PARIGI_MOUTONG: "Kabupaten Parigi Moutong",
+    POSO: "Kabupaten Poso",
+    TOJO_UNA_UNA: "Kabupaten Tojo Una-Una",
+    MOROWALI: "Kabupaten Morowali",
+    MOROWALI_UTARA: "Kabupaten Morowali Utara",
+    BANGGAI: "Kabupaten Banggai",
+    BANGGAI_KEPULAUAN: "Kabupaten Banggai Kepulauan",
+    BANGGAI_LAUT: "Kabupaten Banggai Laut",
+    BUOL: "Kabupaten Buol",
+    TOLITOLI: "Kabupaten Tolitoli",
+};
+
+// KOTA_PALU -> "Kota Palu" (kebalikan dari mapKabupaten, buat tampilan)
+export function mapKabupatenLabel(value) {
+    return KABUPATEN_LABEL[value] || null;
+}
+
+// rt="3", rw="4" -> "003/004"
+export function formatRtRw(rt, rw) {
+    if (!rt && !rw) return null;
+    const pad = (v) => (v ? String(v).replace(/\D/g, "").padStart(3, "0") : "-");
+    return `${pad(rt)}/${pad(rw)}`;
+}
+
+// skorSurvei=20, skorMaksimal=21 -> "20/21"
+export function formatSkor(skorSurvei, skorMaksimal) {
+    if (skorSurvei == null || skorMaksimal == null) return null;
+    return `${skorSurvei}/${skorMaksimal}`;
+}
+
 function clean(value) {
     if (value === null || value === undefined) return null;
     const str = String(value).trim();

@@ -85,6 +85,9 @@ model Warga {
   statusWawancara   StatusWawancara @default(BELUM_DIWAWANCARA)
   tanggalWawancara  DateTime?
   diwawancaraOlehId Int?
+  klasifikasi       String? 
+  skorSurvei        Int? 
+  skorMaksimal      Int? 
 
   createdById Int?
   createdAt   DateTime @default(now())

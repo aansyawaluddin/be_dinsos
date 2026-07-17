@@ -8,6 +8,8 @@ const router = express.Router();
 
 router.get("/list-warga", authenticate, authorize("ADMIN_PROVINSI"), asyncHandler(ctrl.listWarga));
 
+router.get("/warga/:id", authenticate, authorize("ADMIN_PROVINSI"), asyncHandler(ctrl.getWargaDetail));
+
 // Tahap 1: upload file -> preview JSON (belum masuk DB)
 router.post(
     "/upload/preview",

@@ -11,11 +11,15 @@ import {
     formatTanggalLahir,
     statusBansos,
     extractDesil,
+    getInitials,
+    hitungUsia,
+    formatDesilLabel,
+    formatRtRw,
+    formatSkor,
     clean,
 } from "../utils/wargaMapper.js";
 
 const UPLOAD_DIR = path.join(process.cwd(), "uploads");
-
 
 function readAndMapRows(filePath) {
     const workbook = XLSX.readFile(filePath, { cellDates: true });
@@ -23,7 +27,7 @@ function readAndMapRows(filePath) {
     const rawRows = XLSX.utils.sheet_to_json(sheet, { defval: null });
 
     return rawRows.map((row, idx) => {
-        const rowNumber = idx + 2;
+        const rowNumber = idx + 2; // baris 1 = header
         const kabupatenLabel = clean(row["KABUPATEN"]);
         const kabupatenKota = mapKabupaten(row["KABUPATEN"]);
         const kecamatan = clean(row["KECAMATAN"]);
@@ -70,7 +74,6 @@ function readAndMapRows(filePath) {
     });
 }
 
-
 async function analyzeRows(mappedRows) {
     const nikCount = {};
     mappedRows.forEach((r) => {
@@ -91,7 +94,7 @@ async function analyzeRows(mappedRows) {
     let nikKosong = 0;
     let tidakValid = 0;
 
-    const preview = mappedRows.map((r) => {
+    const preview = mappedRows.map((r, idx) => {
         const { rowNumber, dbData, kabupatenLabel, fieldErrors } = r;
         const isNikKosong = !dbData.nik;
         const isDuplicateInFile = dbData.nik ? nikCount[dbData.nik] > 1 : false;
@@ -122,7 +125,7 @@ async function analyzeRows(mappedRows) {
         }
 
         return {
-            rowNumber,
+            nomor: idx + 1,
             nik: dbData.nik,
             nama: dbData.nama,
             kelDesa: dbData.desaKelurahan,
@@ -151,7 +154,6 @@ async function analyzeRows(mappedRows) {
         },
     };
 }
-
 
 export async function previewUpload(req, res) {
     if (!req.file) {
@@ -184,7 +186,6 @@ export async function previewUpload(req, res) {
         "Preview data warga berhasil dibuat"
     );
 }
-
 
 export async function importWarga(req, res) {
     const { uploadId } = req.params;
@@ -234,7 +235,6 @@ export async function importWarga(req, res) {
     );
 }
 
-
 export async function cancelUpload(req, res) {
     const { uploadId } = req.params;
     const safeName = path.basename(uploadId || "");
@@ -247,6 +247,11 @@ export async function cancelUpload(req, res) {
     return success(res, null, "Upload dibatalkan");
 }
 
+const STATUS_WAWANCARA_LABEL = {
+    SUDAH_DIWAWANCARA: "Sudah Disurvei",
+    BELUM_DIWAWANCARA: "Belum Disurvei",
+};
+
 export async function listWarga(req, res) {
     const { page = 1, limit = 20, kabupatenKota, statusWawancara, search } = req.query;
 
@@ -257,16 +262,21 @@ export async function listWarga(req, res) {
         where.OR = [
             { nama: { contains: search } },
             { nik: { contains: search } },
+            { desaKelurahan: { contains: search } },
         ];
     }
 
-    const [items, total] = await Promise.all([
+    const [rows, total, sudahDisurvei, belumDisurvei] = await Promise.all([
         prisma.warga.findMany({
             where,
             select: {
                 id: true,
-                nama: true,
                 nik: true,
+                nama: true,
+                desaKelurahan: true,
+                tanggalLahir: true,
+                desilTerbaru: true,
+                klasifikasi: true,
                 statusWawancara: true,
             },
             skip: (Number(page) - 1) * Number(limit),
@@ -274,10 +284,64 @@ export async function listWarga(req, res) {
             orderBy: { id: "asc" },
         }),
         prisma.warga.count({ where }),
+        prisma.warga.count({ where: { ...where, statusWawancara: "SUDAH_DIWAWANCARA" } }),
+        prisma.warga.count({ where: { ...where, statusWawancara: "BELUM_DIWAWANCARA" } }),
     ]);
+
+    const items = rows.map((w) => ({
+        id: w.id,
+        nik: w.nik,
+        nama: w.nama,
+        inisial: getInitials(w.nama),
+        kelurahan: w.desaKelurahan,
+        usia: hitungUsia(w.tanggalLahir),
+        desilAwal: formatDesilLabel(w.desilTerbaru),
+        klasifikasi: w.klasifikasi,
+        statusWawancara: w.statusWawancara,
+        statusLabel: STATUS_WAWANCARA_LABEL[w.statusWawancara] ?? w.statusWawancara,
+    }));
 
     return success(res, {
         items,
+        ringkasan: {
+            total,
+            sudahDisurvei,
+            belumDisurvei,
+        },
         pagination: { page: Number(page), limit: Number(limit), total },
+    });
+}
+
+export async function getWargaDetail(req, res) {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+        return error(res, "ID warga tidak valid", 400);
+    }
+
+    const warga = await prisma.warga.findUnique({
+        where: { id },
+        include: {
+            diwawancaraOleh: { select: { nama: true } },
+        },
+    });
+
+    if (!warga) {
+        return error(res, "Data warga tidak ditemukan", 404);
+    }
+
+    return success(res, {
+        id: warga.id,
+        nik: warga.nik,
+        nama: warga.nama,
+        inisial: getInitials(warga.nama),
+        alamat: warga.alamat,
+        rtRw: formatRtRw(warga.rt, warga.rw),
+        kelurahan: warga.desaKelurahan,
+        kecamatan: warga.kecamatan,
+        usia: hitungUsia(warga.tanggalLahir),
+        statusLabel: STATUS_WAWANCARA_LABEL[warga.statusWawancara] ?? warga.statusWawancara,
+        klasifikasi: warga.klasifikasi,
+        skorLabel: formatSkor(warga.skorSurvei, warga.skorMaksimal),
+        surveyor: warga.diwawancaraOleh?.nama ?? null,
     });
 }
