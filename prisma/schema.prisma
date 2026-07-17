@@ -1,0 +1,99 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN_PROVINSI
+  ADMIN_KABKOTA
+  ENUMERATOR
+}
+
+enum KabupatenKota {
+  KOTA_PALU
+  DONGGALA
+  SIGI
+  PARIGI_MOUTONG
+  POSO
+  TOJO_UNA_UNA
+  MOROWALI
+  MOROWALI_UTARA
+  BANGGAI
+  BANGGAI_KEPULAUAN
+  BANGGAI_LAUT
+  BUOL
+  TOLITOLI
+}
+
+enum JenisKelamin {
+  LAKI_LAKI
+  PEREMPUAN
+}
+
+enum StatusWawancara {
+  BELUM_DIWAWANCARA
+  SUDAH_DIWAWANCARA
+}
+
+model User {
+  id            Int            @id @default(autoincrement())
+  nama          String
+  email         String         @unique
+  password      String
+  role          Role
+  kabupatenKota KabupatenKota?
+  aktif         Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  uploadedWarga     Warga[]
+  wargaDiwawancarai Warga[] @relation("WawancaraOleh")
+
+  @@index([role])
+  @@index([kabupatenKota])
+  @@map("user")
+}
+
+model Warga {
+  id                        Int             @id @default(autoincrement())
+  kabupatenKota             KabupatenKota
+  kecamatan                 String
+  desaKelurahan             String
+  alamat                    String?
+  rw                        String?
+  rt                        String?
+  desilTerbaru              String?
+  nomorKK                   String
+  nik                       String          @unique
+  nama                      String
+  jenisKelamin              JenisKelamin?
+  tanggalLahir              DateTime?
+  tempatLahir               String?
+  statusPerkawinan          String?
+  hubunganKeluarga          String?
+  keberadaanAnggotaKeluarga String?
+  disabilitas               String?
+  keteranganDisabilitas     String?
+  pbiJk                     String?
+  bansosPkh                 String?
+  bansosSembako             String?
+
+  statusWawancara   StatusWawancara @default(BELUM_DIWAWANCARA)
+  tanggalWawancara  DateTime?
+  diwawancaraOlehId Int?
+
+  createdById Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  createdBy       User? @relation(fields: [createdById], references: [id])
+  diwawancaraOleh User? @relation("WawancaraOleh", fields: [diwawancaraOlehId], references: [id])
+
+  @@index([kabupatenKota])
+  @@index([statusWawancara])
+  @@map("warga")
+}

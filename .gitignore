@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+
+# Environment variables (JANGAN pernah commit .env - berisi password DB & JWT secret)
+.env
+.env.local
+.env.*.local
+
+# Data hasil upload (berisi data sensitif warga: NIK, KK, disabilitas)
+uploads/*
+!uploads/.gitkeep
+
+# Prisma
+prisma/migrations/dev.db
+*.db
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build output (kalau nanti ada proses build/transpile)
+dist/
+build/
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# PM2 (kalau nanti deploy pakai PM2)
+.pm2/
+
+# Coverage/testing (jaga-jaga kalau nanti nambah test)
+coverage/
+.nyc_output/
