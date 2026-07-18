@@ -3,6 +3,7 @@ import path from "path";
 import fs from "fs";
 import prisma from "../lib/prisma.js";
 import { success, error } from "../utils/response.js";
+import { hashPassword } from "../utils/hash.js";
 import {
     mapKabupaten,
     mapJenisKelamin,
@@ -27,7 +28,7 @@ function readAndMapRows(filePath) {
     const rawRows = XLSX.utils.sheet_to_json(sheet, { defval: null });
 
     return rawRows.map((row, idx) => {
-        const rowNumber = idx + 2; // baris 1 = header
+        const rowNumber = idx + 2; 
         const kabupatenLabel = clean(row["KABUPATEN"]);
         const kabupatenKota = mapKabupaten(row["KABUPATEN"]);
         const kecamatan = clean(row["KECAMATAN"]);
@@ -42,7 +43,6 @@ function readAndMapRows(filePath) {
         if (!desaKelurahan) fieldErrors.push("Desa/Kelurahan kosong");
         if (!nomorKK) fieldErrors.push("Nomor KK kosong");
         if (!nama) fieldErrors.push("Nama kosong");
-
         return {
             rowNumber,
             kabupatenLabel,
@@ -343,5 +343,127 @@ export async function getWargaDetail(req, res) {
         klasifikasi: warga.klasifikasi,
         skorLabel: formatSkor(warga.skorSurvei, warga.skorMaksimal),
         surveyor: warga.diwawancaraOleh?.nama ?? null,
+    });
+}
+
+export async function chartKlasifikasi(req, res) {
+    const { kabupatenKota } = req.query;
+
+    const where = { klasifikasi: { not: null } };
+    if (kabupatenKota) where.kabupatenKota = kabupatenKota;
+
+    const grouped = await prisma.warga.groupBy({
+        by: ["klasifikasi"],
+        where,
+        _count: { _all: true },
+    });
+
+    const items = grouped
+        .map((g) => ({ label: g.klasifikasi, jumlah: g._count._all }))
+        .sort((a, b) => b.jumlah - a.jumlah);
+
+    const total = items.reduce((sum, item) => sum + item.jumlah, 0);
+
+    return success(res, { items, total });
+}
+
+const DEFAULT_SURVEYOR_PASSWORD = "12345";
+const USERNAME_REGEX = /^[a-zA-Z0-9._]+$/;
+
+export async function createSurveyor(req, res) {
+    const nama = clean(req.body.nama);
+    const usernameRaw = clean(req.body.username);
+    const wilayahTugas = clean(req.body.wilayahTugas);
+    const nomorHp = clean(req.body.nomorHp);
+
+    if (!nama) {
+        return error(res, "Nama lengkap wajib diisi", 400);
+    }
+    if (!usernameRaw) {
+        return error(res, "Username login wajib diisi", 400);
+    }
+
+    const username = usernameRaw.toLowerCase();
+    if (!USERNAME_REGEX.test(username)) {
+        return error(res, "Username hanya boleh huruf, angka, titik, dan underscore (tanpa spasi)", 400);
+    }
+
+    const hashedPassword = await hashPassword(DEFAULT_SURVEYOR_PASSWORD);
+
+    const surveyor = await prisma.user.create({
+        data: {
+            nama,
+            username,
+            wilayahTugas,
+            nomorHp,
+            password: hashedPassword,
+            role: "ENUMERATOR",
+        },
+    });
+
+    return success(
+        res,
+        {
+            id: surveyor.id,
+            nama: surveyor.nama,
+            username: surveyor.username,
+            wilayahTugas: surveyor.wilayahTugas,
+            nomorHp: surveyor.nomorHp,
+            aktif: surveyor.aktif,
+        },
+        `Surveyor berhasil didaftarkan (password default: ${DEFAULT_SURVEYOR_PASSWORD})`,
+        201
+    );
+}
+
+export async function listSurveyor(req, res) {
+    const { search } = req.query;
+
+    const where = { role: "ENUMERATOR" };
+    if (search) {
+        where.OR = [
+            { nama: { contains: search } },
+            { username: { contains: search } },
+        ];
+    }
+
+    const surveyors = await prisma.user.findMany({
+        where,
+        select: {
+            id: true,
+            nama: true,
+            username: true,
+            wilayahTugas: true,
+            nomorHp: true,
+            aktif: true,
+        },
+        orderBy: { nama: "asc" },
+    });
+
+    const ids = surveyors.map((s) => s.id);
+    const counts = ids.length
+        ? await prisma.warga.groupBy({
+            by: ["diwawancaraOlehId"],
+            where: { diwawancaraOlehId: { in: ids } },
+            _count: { _all: true },
+        })
+        : [];
+    const countMap = Object.fromEntries(counts.map((c) => [c.diwawancaraOlehId, c._count._all]));
+
+    const items = surveyors.map((s) => ({
+        id: s.id,
+        nama: s.nama,
+        username: s.username,
+        inisial: getInitials(s.nama),
+        wilayahTugas: s.wilayahTugas,
+        nomorHp: s.nomorHp,
+        aktif: s.aktif,
+        statusLabel: s.aktif ? "Aktif" : "Nonaktif",
+        totalSurvei: countMap[s.id] || 0,
+    }));
+
+    return success(res, {
+        items,
+        total: items.length,
     });
 }

@@ -42,7 +42,9 @@ enum StatusWawancara {
 model User {
   id            Int            @id @default(autoincrement())
   nama          String
-  email         String         @unique
+  username      String         @unique
+  nomorHp       String?
+  wilayahTugas  String? 
   password      String
   role          Role
   kabupatenKota KabupatenKota?

@@ -4,19 +4,21 @@ import { signToken } from "../utils/jwt.js";
 import { success, error } from "../utils/response.js";
 
 export async function login(req, res) {
-    const { email, password } = req.body;
-    if (!email || !password) {
-        return error(res, "email dan password wajib diisi", 400);
+    const { username, password } = req.body;
+    if (!username || !password) {
+        return error(res, "Username dan password wajib diisi", 400);
     }
 
-    const user = await prisma.user.findUnique({ where: { email } });
+    const user = await prisma.user.findUnique({
+        where: { username: String(username).trim().toLowerCase() },
+    });
     if (!user || !user.aktif) {
-        return error(res, "Email atau password salah", 401);
+        return error(res, "Username atau password salah", 401);
     }
 
     const valid = await comparePassword(password, user.password);
     if (!valid) {
-        return error(res, "Email atau password salah", 401);
+        return error(res, "Username atau password salah", 401);
     }
 
     const payload = {

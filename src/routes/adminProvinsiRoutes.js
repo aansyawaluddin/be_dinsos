@@ -35,4 +35,15 @@ router.delete(
     asyncHandler(ctrl.cancelUpload)
 );
 
+router.get(
+    "/chart/klasifikasi",
+    authenticate,
+    authorize("ADMIN_PROVINSI"),
+    asyncHandler(ctrl.chartKlasifikasi)
+);
+
+// Data Surveyor
+router.get("/surveyor", authenticate, authorize("ADMIN_PROVINSI"), asyncHandler(ctrl.listSurveyor));
+router.post("/surveyor", authenticate, authorize("ADMIN_PROVINSI"), asyncHandler(ctrl.createSurveyor));
+
 export default router;

@@ -7,11 +7,11 @@ async function main() {
     const defaultPassword = await bcrypt.hash("password123", 10);
 
     await prisma.user.upsert({
-        where: { email: "admin@gmail.com" },
+        where: { username: "admin.provinsi" },
         update: {},
         create: {
             nama: "Admin Provinsi",
-            email: "admin@gmail.com",
+            username: "admin.provinsi",
             password: defaultPassword,
             role: "ADMIN_PROVINSI",
             kabupatenKota: null,
@@ -19,11 +19,11 @@ async function main() {
     });
 
     await prisma.user.upsert({
-        where: { email: "admin.palu@gmail.com" },
+        where: { username: "admin.palu" },
         update: {},
         create: {
             nama: "Admin Kota Palu",
-            email: "admin.palu@gmail.com",
+            username: "admin.palu",
             password: defaultPassword,
             role: "ADMIN_KABKOTA",
             kabupatenKota: "KOTA_PALU",
@@ -31,11 +31,11 @@ async function main() {
     });
 
     await prisma.user.upsert({
-        where: { email: "enumerator1@gmail.com" },
+        where: { username: "enumerator1" },
         update: {},
         create: {
             nama: "Enumerator Contoh",
-            email: "enumerator1@gmail.com",
+            username: "enumerator1",
             password: defaultPassword,
             role: "ENUMERATOR",
             kabupatenKota: "KOTA_PALU",
@@ -43,6 +43,7 @@ async function main() {
     });
 
     console.log("3 akun contoh berhasil di-seed (password: password123)");
+    console.log("Login pakai username: admin.provinsi / admin.palu / enumerator1");
 }
 
 main()
