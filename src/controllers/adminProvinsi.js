@@ -511,3 +511,56 @@ export async function listSurveyor(req, res) {
         total: items.length,
     });
 }
+
+export async function setSurveyorStatus(req, res) {
+    const id = Number(req.params.id);
+    const { aktif } = req.body;
+
+    if (!Number.isInteger(id) || id <= 0) {
+        return error(res, "ID surveyor tidak valid", 400);
+    }
+    if (typeof aktif !== "boolean") {
+        return error(res, "Field aktif wajib diisi (true/false)", 400);
+    }
+
+    const surveyor = await prisma.user.findUnique({ where: { id } });
+    if (!surveyor || surveyor.role !== "ENUMERATOR") {
+        return error(res, "Surveyor tidak ditemukan", 404);
+    }
+
+    const updated = await prisma.user.update({
+        where: { id },
+        data: { aktif },
+    });
+
+    return success(
+        res,
+        { id: updated.id, aktif: updated.aktif, statusLabel: updated.aktif ? "Aktif" : "Nonaktif" },
+        updated.aktif ? "Surveyor diaktifkan" : "Surveyor dinonaktifkan"
+    );
+}
+
+export async function deleteSurveyor(req, res) {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+        return error(res, "ID surveyor tidak valid", 400);
+    }
+
+    const surveyor = await prisma.user.findUnique({ where: { id } });
+    if (!surveyor || surveyor.role !== "ENUMERATOR") {
+        return error(res, "Surveyor tidak ditemukan", 404);
+    }
+
+    const jumlahWawancara = await prisma.warga.count({ where: { diwawancaraOlehId: id } });
+    if (jumlahWawancara > 0) {
+        return error(
+            res,
+            `Surveyor ini sudah mewawancarai ${jumlahWawancara} warga, tidak bisa dihapus. Nonaktifkan saja kalau sudah tidak bertugas.`,
+            409
+        );
+    }
+
+    await prisma.user.delete({ where: { id } });
+
+    return success(res, null, "Surveyor berhasil dihapus");
+}

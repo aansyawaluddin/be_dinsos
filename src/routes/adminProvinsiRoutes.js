@@ -46,4 +46,7 @@ router.get(
 router.get("/surveyor", authenticate, authorize("ADMIN_PROVINSI"), asyncHandler(ctrl.listSurveyor));
 router.post("/surveyor", authenticate, authorize("ADMIN_PROVINSI"), asyncHandler(ctrl.createSurveyor));
 
+router.patch("/surveyor/:id/status", authenticate, authorize("ADMIN_PROVINSI"), asyncHandler(ctrl.setSurveyorStatus));
+router.delete("/surveyor/:id", authenticate, authorize("ADMIN_PROVINSI"), asyncHandler(ctrl.deleteSurveyor));
+
 export default router;
