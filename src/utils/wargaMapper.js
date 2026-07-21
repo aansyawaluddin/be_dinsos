@@ -131,6 +131,16 @@ export function mapKabupatenLabel(value) {
     return KABUPATEN_LABEL[value] || null;
 }
 
+const KABUPATEN_ENUM_VALUES = Object.keys(KABUPATEN_LABEL);
+
+export function resolveKabupatenKota(value) {
+    if (!value) return null;
+    const cleaned = String(value).trim();
+    const asEnum = cleaned.toUpperCase().replace(/\s+/g, "_");
+    if (KABUPATEN_ENUM_VALUES.includes(asEnum)) return asEnum;
+    return mapKabupaten(cleaned);
+}
+
 // rt="3", rw="4" -> "003/004"
 export function formatRtRw(rt, rw) {
     if (!rt && !rw) return null;
