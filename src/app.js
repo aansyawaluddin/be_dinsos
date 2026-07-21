@@ -3,6 +3,7 @@ import cors from "cors";
 import morgan from "morgan";
 import authRoutes from "./routes/authRoutes.js";
 import adminProvinsiRoutes from "./routes/adminProvinsiRoutes.js";
+import adminKabkotaRoutes from "./routes/adminKabkotaRoutes.js";
 import enumeratorRoutes from "./routes/enumeratorRoutes.js";
 import errorHandler from "./middlewares/errorHandler.js";
 
@@ -38,6 +39,7 @@ app.get("/health", (req, res) => {
 
 app.use("/api/auth", authRoutes);
 app.use("/api/adminProvinsi", adminProvinsiRoutes);
+app.use("/api/adminKabkota", adminKabkotaRoutes);
 app.use("/api/enumerator", enumeratorRoutes);
 
 app.use((req, res) => {
