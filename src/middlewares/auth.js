@@ -1,18 +1,35 @@
 import { verifyToken } from "../utils/jwt.js";
 import { error } from "../utils/response.js";
+import prisma from "../lib/prisma.js";
 
-export function authenticate(req, res, next) {
+export async function authenticate(req, res, next) {
     const header = req.headers.authorization;
     if (!header || !header.startsWith("Bearer ")) {
         return error(res, "Token tidak ditemukan", 401);
     }
 
     const token = header.split(" ")[1];
+    let payload;
     try {
-        req.user = verifyToken(token);
-        next();
+        payload = verifyToken(token);
     } catch (err) {
         return error(res, "Token tidak valid atau kedaluwarsa", 401);
+    }
+
+    try {
+        const user = await prisma.user.findUnique({
+            where: { id: payload.id },
+            select: { tokenVersion: true, aktif: true },
+        });
+
+        if (!user || !user.aktif || user.tokenVersion !== payload.tokenVersion) {
+            return error(res, "Sesi sudah tidak valid, silakan login ulang", 401);
+        }
+
+        req.user = payload;
+        next();
+    } catch (err) {
+        next(err);
     }
 }
 

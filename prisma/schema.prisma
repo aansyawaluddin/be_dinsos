@@ -46,6 +46,7 @@ model User {
   nomorHp       String?
   wilayahTugas  String? 
   password      String
+  tokenVersion  Int            @default(0)
   role          Role
   kabupatenKota KabupatenKota?
   aktif         Boolean        @default(true)
