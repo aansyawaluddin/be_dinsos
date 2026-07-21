@@ -275,10 +275,10 @@ export async function listWarga(req, res) {
                 id: true,
                 nik: true,
                 nama: true,
+                kabupatenKota: true,
                 desaKelurahan: true,
                 tanggalLahir: true,
                 desilTerbaru: true,
-                klasifikasi: true,
                 statusWawancara: true,
             },
             skip: (Number(page) - 1) * Number(limit),
@@ -295,10 +295,10 @@ export async function listWarga(req, res) {
         nik: w.nik,
         nama: w.nama,
         inisial: getInitials(w.nama),
+        kabupatenKota: mapKabupatenLabel(w.kabupatenKota),
         kelurahan: w.desaKelurahan,
         usia: hitungUsia(w.tanggalLahir),
         desilAwal: formatDesilLabel(w.desilTerbaru),
-        klasifikasi: w.klasifikasi,
         statusWawancara: w.statusWawancara,
         statusLabel: STATUS_WAWANCARA_LABEL[w.statusWawancara] ?? w.statusWawancara,
     }));
@@ -348,25 +348,55 @@ export async function getWargaDetail(req, res) {
     });
 }
 
-export async function chartKlasifikasi(req, res) {
+export async function getCharts(req, res) {
     const { kabupatenKota } = req.query;
 
-    const where = { klasifikasi: { not: null } };
-    if (kabupatenKota) where.kabupatenKota = kabupatenKota;
+    const whereRegional = {};
+    if (kabupatenKota) whereRegional.kabupatenKota = kabupatenKota;
 
-    const grouped = await prisma.warga.groupBy({
-        by: ["klasifikasi"],
-        where,
-        _count: { _all: true },
-    });
+    const [groupedDesil, groupedStatus, groupedWilayah] = await Promise.all([
+        prisma.warga.groupBy({
+            by: ["desilTerbaru"],
+            where: { ...whereRegional, desilTerbaru: { not: null } },
+            _count: { _all: true },
+        }),
+        prisma.warga.groupBy({
+            by: ["statusWawancara"],
+            where: whereRegional,
+            _count: { _all: true },
+        }),
+        prisma.warga.groupBy({
+            by: ["kabupatenKota"],
+            _count: { _all: true },
+        }),
+    ]);
 
-    const items = grouped
-        .map((g) => ({ label: g.klasifikasi, jumlah: g._count._all }))
+    const desilAwalItems = groupedDesil
+        .map((g) => ({
+            label: formatDesilLabel(g.desilTerbaru) ?? g.desilTerbaru,
+            urutan: extractDesil(g.desilTerbaru) ?? 999,
+            jumlah: g._count._all,
+        }))
+        .sort((a, b) => a.urutan - b.urutan)
+        .map(({ label, jumlah }) => ({ label, jumlah }));
+
+    const statusCountMap = Object.fromEntries(groupedStatus.map((g) => [g.statusWawancara, g._count._all]));
+    const statusItems = [
+        { label: "Sudah Disurvei", jumlah: statusCountMap.SUDAH_DIWAWANCARA || 0 },
+        { label: "Belum Disurvei", jumlah: statusCountMap.BELUM_DIWAWANCARA || 0 },
+    ];
+
+    const wilayahItems = groupedWilayah
+        .map((g) => ({ label: mapKabupatenLabel(g.kabupatenKota) ?? g.kabupatenKota, jumlah: g._count._all }))
         .sort((a, b) => b.jumlah - a.jumlah);
 
-    const total = items.reduce((sum, item) => sum + item.jumlah, 0);
+    const sumJumlah = (items) => items.reduce((sum, item) => sum + item.jumlah, 0);
 
-    return success(res, { items, total });
+    return success(res, {
+        desilAwal: { items: desilAwalItems, total: sumJumlah(desilAwalItems) },
+        status: { items: statusItems, total: sumJumlah(statusItems) },
+        wilayah: { items: wilayahItems, total: sumJumlah(wilayahItems) },
+    });
 }
 
 const DEFAULT_SURVEYOR_PASSWORD = "12345";

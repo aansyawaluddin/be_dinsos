@@ -36,10 +36,10 @@ router.delete(
 );
 
 router.get(
-    "/chart/klasifikasi",
+    "/chart",
     authenticate,
     authorize("ADMIN_PROVINSI"),
-    asyncHandler(ctrl.chartKlasifikasi)
+    asyncHandler(ctrl.getCharts)
 );
 
 // Data Surveyor
