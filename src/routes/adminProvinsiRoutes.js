@@ -49,4 +49,11 @@ router.post("/surveyor", authenticate, authorize("ADMIN_PROVINSI"), asyncHandler
 router.patch("/surveyor/:id/status", authenticate, authorize("ADMIN_PROVINSI"), asyncHandler(ctrl.setSurveyorStatus));
 router.delete("/surveyor/:id", authenticate, authorize("ADMIN_PROVINSI"), asyncHandler(ctrl.deleteSurveyor));
 
+router.get(
+    "/sebaran-wilayah",
+    authenticate,
+    authorize("ADMIN_PROVINSI"),
+    asyncHandler(ctrl.getSebaranWilayah)
+);
+
 export default router;

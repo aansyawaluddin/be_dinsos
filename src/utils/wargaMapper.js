@@ -141,6 +141,28 @@ export function resolveKabupatenKota(value) {
     return mapKabupaten(cleaned);
 }
 
+// Titik tengah (ibu kota kabupaten/kota) buat plotting di peta GIS.
+// Koordinat perkiraan buat penempatan titik di peta, bukan batas wilayah presisi survei.
+const KABUPATEN_COORDINATES = {
+    KOTA_PALU: { latitude: -0.8917, longitude: 119.8707 },
+    DONGGALA: { latitude: -0.6944, longitude: 119.7306 },
+    SIGI: { latitude: -1.05, longitude: 119.95 },
+    PARIGI_MOUTONG: { latitude: -0.8167, longitude: 120.1667 },
+    POSO: { latitude: -1.3959, longitude: 120.7517 },
+    TOJO_UNA_UNA: { latitude: -0.8756, longitude: 121.6297 },
+    MOROWALI: { latitude: -2.6, longitude: 121.85 },
+    MOROWALI_UTARA: { latitude: -1.9667, longitude: 121.85 },
+    BANGGAI: { latitude: -0.9481, longitude: 122.7875 },
+    BANGGAI_KEPULAUAN: { latitude: -1.85, longitude: 123.4 },
+    BANGGAI_LAUT: { latitude: -1.5814, longitude: 123.5111 },
+    BUOL: { latitude: 1.1936, longitude: 121.4453 },
+    TOLITOLI: { latitude: 1.0524, longitude: 120.7942 },
+};
+
+export function getKabupatenCoordinates(value) {
+    return KABUPATEN_COORDINATES[value] || null;
+}
+
 // rt="3", rw="4" -> "003/004"
 export function formatRtRw(rt, rw) {
     if (!rt && !rw) return null;

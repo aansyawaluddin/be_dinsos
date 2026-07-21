@@ -8,6 +8,7 @@ import {
     mapKabupaten,
     mapKabupatenLabel,
     resolveKabupatenKota,
+    getKabupatenCoordinates,
     mapJenisKelamin,
     mapJenisKelaminLabel,
     parseTanggalLahir,
@@ -563,4 +564,64 @@ export async function deleteSurveyor(req, res) {
     await prisma.user.delete({ where: { id } });
 
     return success(res, null, "Surveyor berhasil dihapus");
+}
+
+export async function getSebaranWilayah(req, res) {
+    const { kabupatenKota, statusWawancara, desil } = req.query;
+
+    const [totalResponden, sudahTersinkron, enumeratorAktif] = await Promise.all([
+        prisma.warga.count(),
+        prisma.warga.count({ where: { statusWawancara: "SUDAH_DIWAWANCARA" } }),
+        prisma.user.count({ where: { role: "ENUMERATOR", aktif: true } }),
+    ]);
+
+    const menungguSync = totalResponden - sudahTersinkron;
+    const persentaseSinkron = totalResponden > 0 ? Math.round((sudahTersinkron / totalResponden) * 100) : 0;
+
+    const wherePeta = {
+        latitude: { not: null },
+        longitude: { not: null },
+    };
+    if (kabupatenKota) wherePeta.kabupatenKota = kabupatenKota;
+    if (statusWawancara) wherePeta.statusWawancara = statusWawancara;
+
+    let rows = await prisma.warga.findMany({
+        where: wherePeta,
+        select: {
+            id: true,
+            nama: true,
+            latitude: true,
+            longitude: true,
+            kabupatenKota: true,
+            desilTerbaru: true,
+            statusWawancara: true,
+        },
+    });
+
+    const desilFilter = desil ? extractDesil(desil) : null;
+    if (desilFilter) {
+        rows = rows.filter((w) => extractDesil(w.desilTerbaru) === desilFilter);
+    }
+
+    const peta = rows.map((w) => ({
+        id: w.id,
+        nama: w.nama,
+        latitude: w.latitude,
+        longitude: w.longitude,
+        kabupatenKota: mapKabupatenLabel(w.kabupatenKota),
+        desil: extractDesil(w.desilTerbaru),
+        desilLabel: formatDesilLabel(w.desilTerbaru),
+        statusWawancara: w.statusWawancara,
+    }));
+
+    return success(res, {
+        ringkasan: {
+            totalResponden,
+            sudahTersinkron,
+            persentaseSinkron,
+            menungguSync,
+            enumeratorAktif,
+        },
+        peta,
+    });
 }
