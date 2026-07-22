@@ -1,4 +1,5 @@
 import XLSX from "xlsx";
+import PDFDocument from "pdfkit";
 import path from "path";
 import fs from "fs";
 import prisma from "../lib/prisma.js";
@@ -8,7 +9,6 @@ import {
     mapKabupaten,
     mapKabupatenLabel,
     resolveKabupatenKota,
-    getKabupatenCoordinates,
     mapJenisKelamin,
     mapJenisKelaminLabel,
     parseTanggalLahir,
@@ -624,4 +624,160 @@ export async function getSebaranWilayah(req, res) {
         },
         peta,
     });
+}
+
+async function getDataSurveiForExport(kabupatenKota) {
+    const whereWarga = { statusWawancara: "SUDAH_DIWAWANCARA" };
+    if (kabupatenKota) whereWarga.kabupatenKota = kabupatenKota;
+
+    const [wargaList, semuaPertanyaan] = await Promise.all([
+        prisma.warga.findMany({
+            where: whereWarga,
+            select: {
+                nik: true,
+                nama: true,
+                jawabanWawancara: {
+                    include: {
+                        pertanyaan: true,
+                        opsiDipilih: { include: { opsi: true } },
+                    },
+                },
+            },
+            orderBy: { nama: "asc" },
+        }),
+        prisma.pertanyaanWawancara.findMany({
+            orderBy: [{ blok: { urutan: "asc" } }, { urutan: "asc" }],
+            select: { kode: true, variabel: true },
+        }),
+    ]);
+
+    const rows = wargaList.map((w) => {
+        const jawabanMap = {};
+        w.jawabanWawancara.forEach((j) => {
+            jawabanMap[j.pertanyaan.kode] = j.opsiDipilih.map((od) => od.opsi.label).join(", ");
+        });
+        return { nik: w.nik, nama: w.nama, jawabanMap };
+    });
+
+    return { rows, semuaPertanyaan };
+}
+
+export async function exportExcel(req, res) {
+    const { kabupatenKota } = req.query;
+    const { rows, semuaPertanyaan } = await getDataSurveiForExport(kabupatenKota);
+
+    if (rows.length === 0) {
+        return error(res, "Belum ada data warga yang sudah disurvei untuk wilayah ini", 404);
+    }
+
+    const headers = ["NIK", "Nama", ...semuaPertanyaan.map((p) => `${p.kode} - ${p.variabel}`)];
+    const dataRows = rows.map((r) => [
+        r.nik,
+        r.nama,
+        ...semuaPertanyaan.map((p) => r.jawabanMap[p.kode] ?? "-"),
+    ]);
+
+    const worksheet = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
+    worksheet["!cols"] = headers.map((h, i) => ({ wch: i < 2 ? 22 : 28 }));
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Data Survei");
+
+    const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
+
+    res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader("Content-Disposition", `attachment; filename="data-survei-${Date.now()}.xlsx"`);
+    return res.send(buffer);
+}
+
+function hitungLebarKolom(jumlahKolomSoal, totalWidth) {
+    const lebarNik = 85;
+    const lebarNama = 110;
+    const sisaWidth = totalWidth - lebarNik - lebarNama;
+    const lebarPerSoal = jumlahKolomSoal > 0 ? sisaWidth / jumlahKolomSoal : 0;
+    return [lebarNik, lebarNama, ...Array(jumlahKolomSoal).fill(lebarPerSoal)];
+}
+
+function potongTeks(doc, text, maxWidth) {
+    const str = String(text ?? "");
+    if (doc.widthOfString(str) <= maxWidth) return str;
+    let hasil = str;
+    while (hasil.length > 1 && doc.widthOfString(hasil + "...") > maxWidth) {
+        hasil = hasil.slice(0, -1);
+    }
+    return hasil + "...";
+}
+
+export async function exportPdf(req, res) {
+    const { kabupatenKota } = req.query;
+    const { rows, semuaPertanyaan } = await getDataSurveiForExport(kabupatenKota);
+
+    if (rows.length === 0) {
+        return error(res, "Belum ada data warga yang sudah disurvei untuk wilayah ini", 404);
+    }
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="data-survei-${Date.now()}.pdf"`);
+
+    const doc = new PDFDocument({ margin: 30, size: "A4", layout: "landscape" });
+    doc.pipe(res);
+
+    const marginLeft = doc.page.margins.left;
+    const marginTop = doc.page.margins.top;
+    const usableWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+    const batasBawah = doc.page.height - doc.page.margins.bottom;
+    const tinggiBaris = 16;
+    const paddingKolom = 4; // sisa ruang antar kolom biar teks gak nempel
+
+    const headers = ["NIK", "Nama", ...semuaPertanyaan.map((p) => p.kode)];
+    const lebarKolom = hitungLebarKolom(semuaPertanyaan.length, usableWidth);
+
+    doc.fontSize(14).font("Helvetica-Bold").text("Data Warga yang Sudah Disurvei", { align: "left" });
+    doc.fontSize(8).font("Helvetica");
+    semuaPertanyaan.forEach((p) => {
+        doc.text(`${p.kode} = ${p.variabel}`);
+    });
+    doc.moveDown(0.5);
+
+    let y = doc.y;
+
+    function gambarHeader() {
+        let x = marginLeft;
+        doc.font("Helvetica-Bold").fontSize(8);
+        headers.forEach((h, i) => {
+            const teks = potongTeks(doc, h, lebarKolom[i] - paddingKolom);
+            doc.text(teks, x, y, { lineBreak: false });
+            x += lebarKolom[i];
+        });
+        y += tinggiBaris;
+        doc.moveTo(marginLeft, y - 3)
+            .lineTo(marginLeft + usableWidth, y - 3)
+            .strokeColor("#cccccc")
+            .stroke();
+        doc.font("Helvetica").fontSize(8);
+    }
+
+    gambarHeader();
+
+    rows.forEach((r) => {
+        if (y + tinggiBaris > batasBawah) {
+            doc.addPage();
+            y = marginTop;
+            gambarHeader();
+        }
+
+        let x = marginLeft;
+        const nilaiBaris = [r.nik, r.nama, ...semuaPertanyaan.map((p) => r.jawabanMap[p.kode] ?? "-")];
+        nilaiBaris.forEach((v, i) => {
+            const teks = potongTeks(doc, v, lebarKolom[i] - paddingKolom);
+            doc.text(teks, x, y, { lineBreak: false });
+            x += lebarKolom[i];
+        });
+        y += tinggiBaris;
+    });
+
+    doc.end();
 }

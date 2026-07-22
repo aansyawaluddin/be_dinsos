@@ -56,4 +56,8 @@ router.get(
     asyncHandler(ctrl.getSebaranWilayah)
 );
 
+router.get("/export/excel", authenticate, authorize("ADMIN_PROVINSI"), asyncHandler(ctrl.exportExcel));
+router.get("/export/pdf", authenticate, authorize("ADMIN_PROVINSI"), asyncHandler(ctrl.exportPdf));
+
+
 export default router;
