@@ -39,6 +39,11 @@ enum StatusWawancara {
   SUDAH_DIWAWANCARA
 }
 
+enum JenisPertanyaan {
+  PILIHAN_TUNGGAL
+  MULTI_PILIHAN
+}
+
 model User {
   id            Int            @id @default(autoincrement())
   nama          String
@@ -100,8 +105,79 @@ model Warga {
 
   createdBy       User? @relation(fields: [createdById], references: [id])
   diwawancaraOleh User? @relation("WawancaraOleh", fields: [diwawancaraOlehId], references: [id])
+  jawabanWawancara JawabanWawancara[]
 
   @@index([kabupatenKota])
   @@index([statusWawancara])
   @@map("warga")
+}
+
+model BlokWawancara {
+  id     Int    @id @default(autoincrement())
+  kode   String @unique // "D"
+  judul  String // "Karakteristik Responden & Rumah Tangga"
+  urutan Int    @default(0)
+
+  pertanyaan PertanyaanWawancara[]
+
+  @@map("blok_wawancara")
+}
+
+model PertanyaanWawancara {
+  id       Int             @id @default(autoincrement())
+  blokId   Int
+  kode     String 
+  variabel String
+  jenis    JenisPertanyaan
+  wajib    Boolean         @default(false)
+  aturan   String?
+  urutan   Int             @default(0)
+
+  blok BlokWawancara @relation(fields: [blokId], references: [id])
+  opsi OpsiJawaban[]
+  jawaban JawabanWawancara[]
+
+  @@unique([blokId, kode])
+  @@map("pertanyaan_wawancara")
+}
+
+model OpsiJawaban {
+  id           Int    @id @default(autoincrement())
+  pertanyaanId Int
+  kode         String 
+  label        String
+  urutan       Int    @default(0)
+
+  pertanyaan PertanyaanWawancara @relation(fields: [pertanyaanId], references: [id])
+  jawabanDipilih JawabanOpsiDipilih[]
+
+  @@unique([pertanyaanId, kode])
+  @@map("opsi_jawaban")
+}
+
+model JawabanWawancara {
+  id           Int      @id @default(autoincrement())
+  wargaId      Int
+  pertanyaanId Int
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  warga       Warga               @relation(fields: [wargaId], references: [id])
+  pertanyaan  PertanyaanWawancara @relation(fields: [pertanyaanId], references: [id])
+  opsiDipilih JawabanOpsiDipilih[]
+
+  @@unique([wargaId, pertanyaanId])
+  @@map("jawaban_wawancara")
+}
+
+model JawabanOpsiDipilih {
+  id        Int @id @default(autoincrement())
+  jawabanId Int
+  opsiId    Int
+
+  jawaban JawabanWawancara @relation(fields: [jawabanId], references: [id])
+  opsi    OpsiJawaban      @relation(fields: [opsiId], references: [id])
+
+  @@unique([jawabanId, opsiId])
+  @@map("jawaban_opsi_dipilih")
 }
