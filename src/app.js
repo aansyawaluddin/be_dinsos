@@ -1,4 +1,5 @@
 import express from "express";
+import path from "path";
 import cors from "cors";
 import morgan from "morgan";
 import authRoutes from "./routes/authRoutes.js";
@@ -8,6 +9,8 @@ import enumeratorRoutes from "./routes/enumeratorRoutes.js";
 import errorHandler from "./middlewares/errorHandler.js";
 
 const app = express();
+
+app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
 const allowedOrigins = (process.env.CORS_ORIGINS || "http://localhost:3000")
     .split(",")

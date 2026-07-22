@@ -97,7 +97,8 @@ model Warga {
   skorSurvei        Int? 
   skorMaksimal      Int?
   latitude          Float?
-  longitude         Float? 
+  longitude         Float?
+  fotoDokumentasi   String?
 
   createdById Int?
   createdAt   DateTime @default(now())

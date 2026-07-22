@@ -173,14 +173,29 @@ export async function getInstrumen(req, res) {
 export async function submitWawancara(req, res) {
     const surveyorId = req.user.id;
     const id = Number(req.params.id);
-    const { jawaban, latitude, longitude } = req.body;
 
     if (!Number.isInteger(id) || id <= 0) {
         return error(res, "ID warga tidak valid", 400);
     }
+
+    if (!req.file) {
+        return error(res, "Foto dokumentasi wajib diupload", 400);
+    }
+
+    let jawaban;
+    try {
+        jawaban = typeof req.body.jawaban === "string" ? JSON.parse(req.body.jawaban) : req.body.jawaban;
+    } catch (err) {
+        fs.unlink(req.file.path, () => { });
+        return error(res, 'Field "jawaban" harus berupa JSON string yang valid', 400);
+    }
+
     if (!jawaban || typeof jawaban !== "object" || Array.isArray(jawaban)) {
+        fs.unlink(req.file.path, () => { });
         return error(res, "Jawaban wawancara wajib diisi", 400);
     }
+
+    const { latitude, longitude } = req.body;
 
     const [surveyor, warga] = await Promise.all([
         getSurveyorRegion(surveyorId),
@@ -188,9 +203,11 @@ export async function submitWawancara(req, res) {
     ]);
 
     if (!warga) {
+        fs.unlink(req.file.path, () => { });
         return error(res, "Data warga tidak ditemukan", 404);
     }
     if (!surveyor?.kabupatenKota || warga.kabupatenKota !== surveyor.kabupatenKota) {
+        fs.unlink(req.file.path, () => { });
         return error(res, "Warga ini di luar wilayah tugas Anda", 403);
     }
 
@@ -237,6 +254,7 @@ export async function submitWawancara(req, res) {
     }
 
     if (errors.length > 0) {
+        fs.unlink(req.file.path, () => { });
         return error(res, "Jawaban tidak valid", 400, errors);
     }
 
@@ -262,6 +280,7 @@ export async function submitWawancara(req, res) {
 
     const hasLatitude = latitude !== undefined && latitude !== null && latitude !== "";
     const hasLongitude = longitude !== undefined && longitude !== null && longitude !== "";
+    const fotoPathBaru = `foto-wawancara/${req.file.filename}`;
 
     const updated = await prisma.warga.update({
         where: { id },
@@ -269,10 +288,16 @@ export async function submitWawancara(req, res) {
             statusWawancara: "SUDAH_DIWAWANCARA",
             tanggalWawancara: new Date(),
             diwawancaraOlehId: surveyorId,
+            fotoDokumentasi: fotoPathBaru,
             ...(hasLatitude ? { latitude: Number(latitude) } : {}),
             ...(hasLongitude ? { longitude: Number(longitude) } : {}),
         },
     });
+
+    if (warga.fotoDokumentasi && warga.fotoDokumentasi !== fotoPathBaru) {
+        const fotoLamaPath = path.join(process.cwd(), "uploads", warga.fotoDokumentasi);
+        fs.unlink(fotoLamaPath, () => { });
+    }
 
     return success(
         res,
@@ -281,6 +306,7 @@ export async function submitWawancara(req, res) {
             nama: updated.nama,
             statusWawancara: updated.statusWawancara,
             statusLabel: STATUS_LABEL[updated.statusWawancara],
+            fotoDokumentasi: updated.fotoDokumentasi,
             latitude: updated.latitude,
             longitude: updated.longitude,
         },
@@ -296,7 +322,10 @@ export async function getHasilWawancara(req, res) {
 
     const [surveyor, warga] = await Promise.all([
         getSurveyorRegion(req.user.id),
-        prisma.warga.findUnique({ where: { id }, select: { id: true, nik: true, nama: true, kabupatenKota: true } }),
+        prisma.warga.findUnique({
+            where: { id },
+            select: { id: true, nik: true, nama: true, kabupatenKota: true, fotoDokumentasi: true },
+        }),
     ]);
 
     if (!warga) {
@@ -324,6 +353,7 @@ export async function getHasilWawancara(req, res) {
     return success(res, {
         nik: warga.nik,
         nama: warga.nama,
+        foto: warga.fotoDokumentasi ? `/uploads/${warga.fotoDokumentasi}` : null,
         ringkasanJawaban,
     });
 }

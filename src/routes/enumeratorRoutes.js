@@ -1,6 +1,7 @@
 import express from "express";
 import asyncHandler from "../middlewares/asyncHandler.js";
 import { authenticate, authorize } from "../middlewares/auth.js";
+import uploadFoto from "../middlewares/uploadFoto.js";
 import * as ctrl from "../controllers/enumeratorController.js";
 
 const router = express.Router();
@@ -15,6 +16,7 @@ router.post(
     "/warga/:id/wawancara",
     authenticate,
     authorize("ENUMERATOR"),
+    uploadFoto.single("foto"),
     asyncHandler(ctrl.submitWawancara)
 );
 
