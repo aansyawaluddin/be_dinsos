@@ -4,7 +4,6 @@ import {
     getInitials,
     hitungUsia,
     formatRtRw,
-    formatSkor,
     clean,
 } from "../utils/wargaMapper.js";
 
@@ -138,5 +137,193 @@ export async function getTugasWargaDetail(req, res) {
         usia: hitungUsia(warga.tanggalLahir),
         statusWawancara: warga.statusWawancara,
         statusLabel: STATUS_DETAIL_LABEL[warga.statusWawancara] ?? warga.statusWawancara,
+    });
+}
+
+export async function getInstrumen(req, res) {
+    const bloks = await prisma.blokWawancara.findMany({
+        orderBy: { urutan: "asc" },
+        include: {
+            pertanyaan: {
+                orderBy: { urutan: "asc" },
+                include: {
+                    opsi: { orderBy: { urutan: "asc" } },
+                },
+            },
+        },
+    });
+
+    const data = bloks.map((blok) => ({
+        kode: blok.kode,
+        judul: blok.judul,
+        pertanyaan: blok.pertanyaan.map((p) => ({
+            id: p.id,
+            kode: p.kode,
+            variabel: p.variabel,
+            jenis: p.jenis,
+            wajib: p.wajib,
+            aturan: p.aturan,
+            opsi: p.opsi.map((o) => ({ kode: o.kode, label: o.label })),
+        })),
+    }));
+
+    return success(res, { blok: data });
+}
+
+export async function submitWawancara(req, res) {
+    const surveyorId = req.user.id;
+    const id = Number(req.params.id);
+    const { jawaban, latitude, longitude } = req.body;
+
+    if (!Number.isInteger(id) || id <= 0) {
+        return error(res, "ID warga tidak valid", 400);
+    }
+    if (!jawaban || typeof jawaban !== "object" || Array.isArray(jawaban)) {
+        return error(res, "Jawaban wawancara wajib diisi", 400);
+    }
+
+    const [surveyor, warga] = await Promise.all([
+        getSurveyorRegion(surveyorId),
+        prisma.warga.findUnique({ where: { id } }),
+    ]);
+
+    if (!warga) {
+        return error(res, "Data warga tidak ditemukan", 404);
+    }
+    if (!surveyor?.kabupatenKota || warga.kabupatenKota !== surveyor.kabupatenKota) {
+        return error(res, "Warga ini di luar wilayah tugas Anda", 403);
+    }
+
+    const semuaPertanyaan = await prisma.pertanyaanWawancara.findMany({
+        include: { opsi: true },
+    });
+
+    const errors = [];
+    const jawabanValid = [];
+
+    for (const soal of semuaPertanyaan) {
+        const nilai = jawaban[soal.kode];
+        const kosong =
+            nilai === undefined ||
+            nilai === null ||
+            nilai === "" ||
+            (Array.isArray(nilai) && nilai.length === 0);
+
+        if (soal.wajib && kosong) {
+            errors.push(`${soal.kode} (${soal.variabel}) wajib diisi`);
+            continue;
+        }
+        if (kosong) continue;
+
+        const nilaiArray = Array.isArray(nilai) ? nilai.map(String) : [String(nilai)];
+
+        if (soal.jenis === "PILIHAN_TUNGGAL" && nilaiArray.length > 1) {
+            errors.push(`${soal.kode}: cuma boleh pilih 1 jawaban`);
+            continue;
+        }
+
+        const kodeOpsiValid = soal.opsi.map((o) => o.kode);
+        const tidakValid = nilaiArray.filter((v) => !kodeOpsiValid.includes(v));
+        if (tidakValid.length > 0) {
+            errors.push(`${soal.kode}: pilihan tidak valid (${tidakValid.join(", ")})`);
+            continue;
+        }
+
+        jawabanValid.push({
+            pertanyaanId: soal.id,
+            kodePertanyaan: soal.kode,
+            opsiIds: soal.opsi.filter((o) => nilaiArray.includes(o.kode)).map((o) => o.id),
+        });
+    }
+
+    if (errors.length > 0) {
+        return error(res, "Jawaban tidak valid", 400, errors);
+    }
+
+    await prisma.$transaction(async (tx) => {
+        for (const jv of jawabanValid) {
+            const existing = await tx.jawabanWawancara.findUnique({
+                where: { wargaId_pertanyaanId: { wargaId: id, pertanyaanId: jv.pertanyaanId } },
+            });
+
+            const jawabanRecord = existing
+                ? existing
+                : await tx.jawabanWawancara.create({ data: { wargaId: id, pertanyaanId: jv.pertanyaanId } });
+
+            if (existing) {
+                await tx.jawabanOpsiDipilih.deleteMany({ where: { jawabanId: existing.id } });
+            }
+
+            await tx.jawabanOpsiDipilih.createMany({
+                data: jv.opsiIds.map((opsiId) => ({ jawabanId: jawabanRecord.id, opsiId })),
+            });
+        }
+    });
+
+    const hasLatitude = latitude !== undefined && latitude !== null && latitude !== "";
+    const hasLongitude = longitude !== undefined && longitude !== null && longitude !== "";
+
+    const updated = await prisma.warga.update({
+        where: { id },
+        data: {
+            statusWawancara: "SUDAH_DIWAWANCARA",
+            tanggalWawancara: new Date(),
+            diwawancaraOlehId: surveyorId,
+            ...(hasLatitude ? { latitude: Number(latitude) } : {}),
+            ...(hasLongitude ? { longitude: Number(longitude) } : {}),
+        },
+    });
+
+    return success(
+        res,
+        {
+            id: updated.id,
+            nama: updated.nama,
+            statusWawancara: updated.statusWawancara,
+            statusLabel: STATUS_LABEL[updated.statusWawancara],
+            latitude: updated.latitude,
+            longitude: updated.longitude,
+        },
+        "Wawancara berhasil disimpan"
+    );
+}
+
+export async function getHasilWawancara(req, res) {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+        return error(res, "ID warga tidak valid", 400);
+    }
+
+    const [surveyor, warga] = await Promise.all([
+        getSurveyorRegion(req.user.id),
+        prisma.warga.findUnique({ where: { id }, select: { id: true, nik: true, nama: true, kabupatenKota: true } }),
+    ]);
+
+    if (!warga) {
+        return error(res, "Data warga tidak ditemukan", 404);
+    }
+    if (!surveyor?.kabupatenKota || warga.kabupatenKota !== surveyor.kabupatenKota) {
+        return error(res, "Warga ini di luar wilayah tugas Anda", 403);
+    }
+
+    const jawabanList = await prisma.jawabanWawancara.findMany({
+        where: { wargaId: id },
+        include: {
+            pertanyaan: true,
+            opsiDipilih: { include: { opsi: true } },
+        },
+        orderBy: { pertanyaan: { urutan: "asc" } },
+    });
+
+    const ringkasanJawaban = jawabanList.map((j) => ({
+        kode: j.pertanyaan.kode,
+        pertanyaan: j.pertanyaan.variabel,
+        jawaban: j.opsiDipilih.map((od) => od.opsi.label).join(", "),
+    }));
+
+    return success(res, {
+        nik: warga.nik,
+        nama: warga.nama,
+        ringkasanJawaban,
     });
 }
