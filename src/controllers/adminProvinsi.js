@@ -17,6 +17,7 @@ import {
     extractDesil,
     getInitials,
     hitungUsia,
+    hitungPersentase,
     formatDesilLabel,
     formatRtRw,
     formatSkor,
@@ -567,20 +568,25 @@ export async function deleteSurveyor(req, res) {
 export async function getSebaranWilayah(req, res) {
     const { kabupatenKota, statusWawancara, desil } = req.query;
 
+    const whereGlobal = {};
+    if (kabupatenKota) whereGlobal.kabupatenKota = kabupatenKota;
+
     const [totalResponden, sudahTersinkron, enumeratorAktif] = await Promise.all([
-        prisma.warga.count(),
-        prisma.warga.count({ where: { statusWawancara: "SUDAH_DIWAWANCARA" } }),
-        prisma.user.count({ where: { role: "ENUMERATOR", aktif: true } }),
+        prisma.warga.count({ where: whereGlobal }),
+        prisma.warga.count({ where: { ...whereGlobal, statusWawancara: "SUDAH_DIWAWANCARA" } }),
+        prisma.user.count({
+            where: { role: "ENUMERATOR", aktif: true, ...(kabupatenKota ? { kabupatenKota } : {}) },
+        }),
     ]);
 
     const menungguSync = totalResponden - sudahTersinkron;
-    const persentaseSinkron = totalResponden > 0 ? Math.round((sudahTersinkron / totalResponden) * 100) : 0;
+    const persentaseSinkron = hitungPersentase(sudahTersinkron, totalResponden);
 
     const wherePeta = {
+        ...whereGlobal,
         latitude: { not: null },
         longitude: { not: null },
     };
-    if (kabupatenKota) wherePeta.kabupatenKota = kabupatenKota;
     if (statusWawancara) wherePeta.statusWawancara = statusWawancara;
 
     let rows = await prisma.warga.findMany({
@@ -615,6 +621,7 @@ export async function getSebaranWilayah(req, res) {
     return success(res, {
         ringkasan: {
             totalResponden,
+            totalKabupatenKota: 13,
             sudahTersinkron,
             persentaseSinkron,
             menungguSync,

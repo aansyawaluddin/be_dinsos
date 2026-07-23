@@ -5,6 +5,7 @@ import {
     extractDesil,
     getInitials,
     hitungUsia,
+    hitungPersentase,
     formatDesilLabel,
     formatRtRw,
     formatSkor,
@@ -223,7 +224,7 @@ export async function getSebaranWilayah(req, res) {
     ]);
 
     const menungguSync = totalResponden - sudahTersinkron;
-    const persentaseSinkron = totalResponden > 0 ? Math.round((sudahTersinkron / totalResponden) * 100) : 0;
+    const persentaseSinkron = hitungPersentase(sudahTersinkron, totalResponden);
 
     const wherePeta = {
         ...whereGlobal,

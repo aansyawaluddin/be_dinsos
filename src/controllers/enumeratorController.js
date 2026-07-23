@@ -4,6 +4,7 @@ import {
     getInitials,
     hitungUsia,
     formatRtRw,
+    hitungPersentase,
     clean,
 } from "../utils/wargaMapper.js";
 
@@ -57,7 +58,7 @@ export async function getDashboard(req, res) {
     ]);
 
     const belum = total - selesai;
-    const persentase = total > 0 ? Math.round((selesai / total) * 100) : 0;
+    const persentase = hitungPersentase(selesai, total);
 
     return success(res, {
         nama: surveyor.nama,

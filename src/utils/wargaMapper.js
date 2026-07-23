@@ -176,6 +176,11 @@ export function formatSkor(skorSurvei, skorMaksimal) {
     return `${skorSurvei}/${skorMaksimal}`;
 }
 
+export function hitungPersentase(bagian, total) {
+    if (!total || total <= 0) return 0;
+    return Math.round((bagian / total) * 1000) / 10;
+}
+
 function clean(value) {
     if (value === null || value === undefined) return null;
     const str = String(value).trim();
