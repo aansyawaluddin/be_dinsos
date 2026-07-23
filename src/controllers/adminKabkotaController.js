@@ -111,8 +111,6 @@ export async function getWargaDetail(req, res) {
         kecamatan: warga.kecamatan,
         usia: hitungUsia(warga.tanggalLahir),
         statusLabel: STATUS_WAWANCARA_LABEL[warga.statusWawancara] ?? warga.statusWawancara,
-        klasifikasi: warga.klasifikasi,
-        skorLabel: formatSkor(warga.skorSurvei, warga.skorMaksimal),
         surveyor: warga.diwawancaraOleh?.nama ?? null,
     });
 }
