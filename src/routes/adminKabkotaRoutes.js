@@ -9,6 +9,8 @@ router.get("/list-warga", authenticate, authorize("ADMIN_KABKOTA"), asyncHandler
 
 router.get("/warga/:id", authenticate, authorize("ADMIN_KABKOTA"), asyncHandler(ctrl.getWargaDetail));
 
+router.get("/warga/:id/hasil", authenticate, authorize("ADMIN_KABKOTA"), asyncHandler(ctrl.getHasilWawancara));
+
 router.get("/chart", authenticate, authorize("ADMIN_KABKOTA"), asyncHandler(ctrl.getCharts));
 
 router.get("/surveyor", authenticate, authorize("ADMIN_KABKOTA"), asyncHandler(ctrl.listSurveyor));

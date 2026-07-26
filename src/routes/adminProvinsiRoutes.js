@@ -10,6 +10,8 @@ router.get("/list-warga", authenticate, authorize("ADMIN_PROVINSI"), asyncHandle
 
 router.get("/warga/:id", authenticate, authorize("ADMIN_PROVINSI"), asyncHandler(ctrl.getWargaDetail));
 
+router.get("/warga/:id/hasil", authenticate, authorize("ADMIN_PROVINSI"), asyncHandler(ctrl.getHasilWawancara));
+
 // Tahap 1: upload file -> preview JSON (belum masuk DB)
 router.post(
     "/upload/preview",

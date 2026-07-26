@@ -116,6 +116,55 @@ export async function getWargaDetail(req, res) {
     });
 }
 
+export async function getHasilWawancara(req, res) {
+    const kabupatenKota = requireRegion(req, res);
+    if (!kabupatenKota) return;
+
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+        return error(res, "ID warga tidak valid", 400);
+    }
+
+    const warga = await prisma.warga.findUnique({
+        where: { id },
+        select: { id: true, nik: true, nama: true, kabupatenKota: true, fotoDokumentasi: true },
+    });
+
+    if (!warga) {
+        return error(res, "Data warga tidak ditemukan", 404);
+    }
+    if (warga.kabupatenKota !== kabupatenKota) {
+        return error(res, "Warga ini di luar wilayah Anda", 403);
+    }
+
+    const jawabanList = await prisma.jawabanWawancara.findMany({
+        where: { wargaId: id },
+        include: {
+            pertanyaan: true,
+            opsiDipilih: { include: { opsi: true } },
+        },
+        orderBy: [
+            { pertanyaan: { blok: { urutan: "asc" } } },
+            { pertanyaan: { urutan: "asc" } }
+        ],
+    });
+
+    const ringkasanJawaban = jawabanList.map((j) => ({
+        kode: j.pertanyaan.kode,
+        pertanyaan: j.pertanyaan.variabel,
+        jawaban: j.opsiDipilih.length > 0
+            ? j.opsiDipilih.map((od) => od.opsi.label).join(", ")
+            : (j.nilaiTeks ?? "-"),
+    }));
+
+    return success(res, {
+        nik: warga.nik,
+        nama: warga.nama,
+        foto: warga.fotoDokumentasi ? `/uploads/${warga.fotoDokumentasi}` : null,
+        ringkasanJawaban,
+    });
+}
+
 export async function getCharts(req, res) {
     const kabupatenKota = requireRegion(req, res);
     if (!kabupatenKota) return;
