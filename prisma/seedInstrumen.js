@@ -1,156 +1,23 @@
 import { PrismaClient } from "@prisma/client";
+import { BLOK_A } from "./bank_kuesioner/blokA.js";
+import { BLOK_B } from "./bank_kuesioner/blokB.js";
+import { BLOK_C } from "./bank_kuesioner/blokC.js";
+import { BLOK_D } from "./bank_kuesioner/blokD.js";
+import { BLOK_E } from "./bank_kuesioner/blokE.js";
+import { BLOK_F } from "./bank_kuesioner/blokF.js";
+import { BLOK_G } from "./bank_kuesioner/blokG.js";
+import { BLOK_H } from "./bank_kuesioner/blokH.js";
+import { BLOK_I } from "./bank_kuesioner/blokI.js";
+import { BLOK_J } from "./bank_kuesioner/blokJ.js";
+import { BLOK_K } from "./bank_kuesioner/blokK.js";
+import { BLOK_L } from "./bank_kuesioner/blokL.js";
 
 const prisma = new PrismaClient();
 
-const BLOK_D = {
-    kode: "D",
-    judul: "Karakteristik Responden & Rumah Tangga",
-    pertanyaan: [
-        {
-            kode: "D1",
-            variabel: "Kategori responden",
-            jenis: "MULTI_PILIHAN",
-            wajib: true,
-            aturan: "Minimal pilih satu",
-            opsi: [
-                { kode: "A", label: "RT miskin/tidak mampu" },
-                { kode: "B", label: "Rentan miskin" },
-                { kode: "C", label: "Lansia" },
-                { kode: "D", label: "Penyandang disabilitas" },
-                { kode: "E", label: "Perempuan kepala keluarga" },
-                { kode: "F", label: "Pekerja informal" },
-                { kode: "G", label: "Lainnya" },
-            ],
-        },
-        {
-            kode: "D2",
-            variabel: "Status dalam DTSEN",
-            jenis: "PILIHAN_TUNGGAL",
-            wajib: true,
-            aturan: "Diutamakan diisi otomatis dari data desil awal (prelist) bila tersedia",
-            opsi: [
-                { kode: "1", label: "Desil 1" },
-                { kode: "2", label: "Desil 2" },
-                { kode: "3", label: "Desil 3" },
-                { kode: "4", label: "Desil 4" },
-                { kode: "5", label: "Tidak terdaftar" },
-                { kode: "8", label: "Tidak tahu" },
-            ],
-        },
-        {
-            kode: "D3",
-            variabel: "Jumlah anggota rumah tangga",
-            jenis: "PILIHAN_TUNGGAL",
-            wajib: true,
-            aturan: null,
-            opsi: [
-                { kode: "1", label: "1–2 orang" },
-                { kode: "2", label: "3–4 orang" },
-                { kode: "3", label: "5–6 orang" },
-                { kode: "4", label: "7 orang atau lebih" },
-            ],
-        },
-        {
-            kode: "D4",
-            variabel: "Jenis kelamin kepala rumah tangga",
-            jenis: "PILIHAN_TUNGGAL",
-            wajib: true,
-            aturan: null,
-            opsi: [
-                { kode: "1", label: "Laki-laki" },
-                { kode: "2", label: "Perempuan" },
-            ],
-        },
-        {
-            kode: "D5",
-            variabel: "Umur responden",
-            jenis: "PILIHAN_TUNGGAL",
-            wajib: true,
-            aturan: "Kode 1 cuma valid kalau responden sudah menikah",
-            opsi: [
-                { kode: "1", label: "Di bawah 18 tahun (sudah menikah)" },
-                { kode: "2", label: "18–30 tahun" },
-                { kode: "3", label: "31–45 tahun" },
-                { kode: "4", label: "46–60 tahun" },
-                { kode: "5", label: "61 tahun atau lebih" },
-            ],
-        },
-        {
-            kode: "D6",
-            variabel: "Pendidikan tertinggi kepala rumah tangga",
-            jenis: "PILIHAN_TUNGGAL",
-            wajib: true,
-            aturan: null,
-            opsi: [
-                { kode: "0", label: "Tidak/belum tamat SD" },
-                { kode: "1", label: "SD" },
-                { kode: "2", label: "SMP" },
-                { kode: "3", label: "SMA" },
-                { kode: "4", label: "D1–D3" },
-                { kode: "5", label: "D4/S1" },
-                { kode: "6", label: "S2/S3" },
-            ],
-        },
-        {
-            kode: "D7",
-            variabel: "Status pekerjaan pencari nafkah utama",
-            jenis: "PILIHAN_TUNGGAL",
-            wajib: true,
-            aturan: null,
-            opsi: [
-                { kode: "1", label: "Berusaha sendiri" },
-                { kode: "2", label: "Berusaha dibantu buruh" },
-                { kode: "3", label: "Buruh/karyawan swasta" },
-                { kode: "4", label: "ASN/TNI/Polri/BUMN/BUMD" },
-                { kode: "5", label: "Pekerja bebas" },
-                { kode: "6", label: "Pekerja keluarga/tidak dibayar" },
-                { kode: "7", label: "Tidak bekerja" },
-            ],
-        },
-        {
-            kode: "D8",
-            variabel: "Sumber penghasilan utama rumah tangga",
-            jenis: "PILIHAN_TUNGGAL",
-            wajib: true,
-            aturan: null,
-            opsi: [
-                { kode: "1", label: "ART yang bekerja" },
-                { kode: "2", label: "Kiriman uang/barang" },
-                { kode: "3", label: "Hasil investasi" },
-                { kode: "4", label: "Tabungan" },
-                { kode: "5", label: "Pensiun" },
-                { kode: "6", label: "Lainnya" },
-            ],
-        },
-        {
-            kode: "D9",
-            variabel: "Perkiraan pendapatan rumah tangga per bulan",
-            jenis: "PILIHAN_TUNGGAL",
-            wajib: false,
-            aturan: "Opsional karena sensitif; jawaban berupa rentang, bukan nilai persis",
-            opsi: [
-                { kode: "1", label: "< Rp1 juta" },
-                { kode: "2", label: "Rp1–2 juta" },
-                { kode: "3", label: "Rp2–3 juta" },
-                { kode: "4", label: "> Rp3 juta" },
-                { kode: "8", label: "Tidak bersedia menjawab" },
-            ],
-        },
-        {
-            kode: "D10",
-            variabel: "Jumlah tanggungan khusus (lansia/anak balita/disabilitas)",
-            jenis: "PILIHAN_TUNGGAL",
-            wajib: false,
-            aturan: null,
-            opsi: [
-                { kode: "0", label: "Tidak ada" },
-                { kode: "1", label: "1–2 orang" },
-                { kode: "2", label: "3–4 orang" },
-                { kode: "3", label: "5 orang atau lebih" },
-            ],
-        },
-    ],
-};
+const SEMUA_BLOK = [
+    BLOK_A, BLOK_B, BLOK_C, BLOK_D, BLOK_E,
+    BLOK_F, BLOK_G, BLOK_H, BLOK_I, BLOK_J, BLOK_K, BLOK_L,
+];
 
 async function seedBlok(blokConfig, urutanBlok) {
     const blok = await prisma.blokWawancara.upsert({
@@ -200,9 +67,39 @@ async function seedBlok(blokConfig, urutanBlok) {
     console.log(`Blok ${blokConfig.kode} (${blokConfig.judul}): ${blokConfig.pertanyaan.length} pertanyaan di-seed.`);
 }
 
+async function hapusBlokLama(kode) {
+    const blokLama = await prisma.blokWawancara.findUnique({ where: { kode } });
+    if (!blokLama) return;
+
+    const pertanyaanLama = await prisma.pertanyaanWawancara.findMany({ where: { blokId: blokLama.id } });
+    const pertanyaanIds = pertanyaanLama.map((p) => p.id);
+
+    if (pertanyaanIds.length > 0) {
+        const jawabanLama = await prisma.jawabanWawancara.findMany({
+            where: { pertanyaanId: { in: pertanyaanIds } },
+        });
+        const jawabanIds = jawabanLama.map((j) => j.id);
+
+        if (jawabanIds.length > 0) {
+            await prisma.jawabanOpsiDipilih.deleteMany({ where: { jawabanId: { in: jawabanIds } } });
+            await prisma.jawabanWawancara.deleteMany({ where: { id: { in: jawabanIds } } });
+        }
+        await prisma.opsiJawaban.deleteMany({ where: { pertanyaanId: { in: pertanyaanIds } } });
+        await prisma.pertanyaanWawancara.deleteMany({ where: { blokId: blokLama.id } });
+    }
+
+    await prisma.blokWawancara.delete({ where: { id: blokLama.id } });
+    console.log(`Blok lama "${kode}" (placeholder) beserta jawabannya berhasil dihapus.`);
+}
+
 async function main() {
-    await seedBlok(BLOK_D, 0);
-    console.log("Seed instrumen wawancara selesai.");
+    await hapusBlokLama("D");
+
+    for (let i = 0; i < SEMUA_BLOK.length; i++) {
+        await seedBlok(SEMUA_BLOK[i], i);
+    }
+
+    console.log("Seed instrumen selesai.");
 }
 
 main()

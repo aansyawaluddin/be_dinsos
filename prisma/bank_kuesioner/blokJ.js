@@ -1,0 +1,68 @@
+export const BLOK_J = {
+    kode: "J",
+    judul: "Permasalahan Sosial dan Kerentanan",
+    pertanyaan: [
+        {
+            kode: "J1",
+            variabel: "Apakah dalam Keluarga terdapat permasalahan sosial berikut?",
+            jenis: "MULTI_PILIHAN",
+            wajib: true,
+            aturan:
+                "⚠️ Urutan opsi direkonstruksi dari tata letak tabel PDF 2 kolom yang nomornya sempat hilang -- perlu diverifikasi ulang ke dokumen asli",
+            opsi: [
+                { kode: "1", label: "Anak putus sekolah" },
+                { kode: "2", label: "Anak/remaja bekerja (pekerja anak)" },
+                { kode: "3", label: "Kekerasan dalam Keluarga (KDRT)" },
+                { kode: "4", label: "Pernikahan anak (< 18 tahun)" },
+                { kode: "5", label: "Anggota Keluarga yang sakit jiwa/gangguan mental" },
+                { kode: "6", label: "Ketergantungan alkohol/narkoba" },
+                { kode: "7", label: "Lansia terlantar (tidak ada yang merawat)" },
+                { kode: "8", label: "Penyandang disabilitas tanpa pendampingan" },
+                { kode: "9", label: "Tidak ada permasalahan sosial di atas" },
+            ],
+        },
+        {
+            kode: "J2",
+            variabel: "Apakah Keluarga pernah mendapat pendampingan sosial dari pemerintah (pendamping PKH/peksos)?",
+            jenis: "PILIHAN_TUNGGAL",
+            wajib: true,
+            aturan: null,
+            opsi: [
+                { kode: "1", label: "Ya, secara rutin" },
+                { kode: "2", label: "Ya, tapi jarang" },
+                { kode: "3", label: "Tidak pernah" },
+            ],
+        },
+        {
+            kode: "J3",
+            variabel: "Apakah di lingkungan sekitar terdapat konflik sosial yang mempengaruhi kesejahteraan?",
+            jenis: "PILIHAN_TUNGGAL",
+            wajib: true,
+            aturan: null,
+            opsi: [
+                { kode: "1", label: "Ya" },
+                { kode: "2", label: "Tidak" },
+            ],
+        },
+        {
+            kode: "J3a",
+            variabel: "Jenis konflik (jika J3 = 'Ya')",
+            jenis: "TEKS",
+            wajib: false,
+            aturan: "Diisi hanya jika J3 = 'Ya'",
+        },
+        {
+            kode: "J4",
+            variabel: "Seberapa aktif keterlibatan Keluarga dalam kegiatan sosial kemasyarakatan?",
+            jenis: "PILIHAN_TUNGGAL",
+            wajib: true,
+            aturan: null,
+            opsi: [
+                { kode: "1", label: "Sangat aktif (pengurus RT/RW, kelompok tani, dll.)" },
+                { kode: "2", label: "Cukup aktif" },
+                { kode: "3", label: "Kurang aktif" },
+                { kode: "4", label: "Tidak aktif sama sekali" },
+            ],
+        },
+    ],
+};

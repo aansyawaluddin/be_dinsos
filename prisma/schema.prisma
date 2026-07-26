@@ -40,6 +40,8 @@ enum StatusWawancara {
 }
 
 enum JenisPertanyaan {
+  TEKS 
+  ANGKA 
   PILIHAN_TUNGGAL
   MULTI_PILIHAN
 }
@@ -115,8 +117,8 @@ model Warga {
 
 model BlokWawancara {
   id     Int    @id @default(autoincrement())
-  kode   String @unique // "D"
-  judul  String // "Karakteristik Responden & Rumah Tangga"
+  kode   String @unique
+  judul  String 
   urutan Int    @default(0)
 
   pertanyaan PertanyaanWawancara[]
