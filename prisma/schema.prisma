@@ -162,6 +162,7 @@ model JawabanWawancara {
   id           Int      @id @default(autoincrement())
   wargaId      Int
   pertanyaanId Int
+  nilaiTeks    String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

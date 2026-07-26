@@ -67,34 +67,23 @@ async function seedBlok(blokConfig, urutanBlok) {
     console.log(`Blok ${blokConfig.kode} (${blokConfig.judul}): ${blokConfig.pertanyaan.length} pertanyaan di-seed.`);
 }
 
-async function hapusBlokLama(kode) {
-    const blokLama = await prisma.blokWawancara.findUnique({ where: { kode } });
-    if (!blokLama) return;
+async function hapusSemuaDataKuesioner() {
+    console.log("Menghapus semua data kuesioner lama beserta jawabannya...");
 
-    const pertanyaanLama = await prisma.pertanyaanWawancara.findMany({ where: { blokId: blokLama.id } });
-    const pertanyaanIds = pertanyaanLama.map((p) => p.id);
+    await prisma.jawabanOpsiDipilih.deleteMany();
+    await prisma.jawabanWawancara.deleteMany();
 
-    if (pertanyaanIds.length > 0) {
-        const jawabanLama = await prisma.jawabanWawancara.findMany({
-            where: { pertanyaanId: { in: pertanyaanIds } },
-        });
-        const jawabanIds = jawabanLama.map((j) => j.id);
+    await prisma.opsiJawaban.deleteMany();
+    await prisma.pertanyaanWawancara.deleteMany();
+    await prisma.blokWawancara.deleteMany();
 
-        if (jawabanIds.length > 0) {
-            await prisma.jawabanOpsiDipilih.deleteMany({ where: { jawabanId: { in: jawabanIds } } });
-            await prisma.jawabanWawancara.deleteMany({ where: { id: { in: jawabanIds } } });
-        }
-        await prisma.opsiJawaban.deleteMany({ where: { pertanyaanId: { in: pertanyaanIds } } });
-        await prisma.pertanyaanWawancara.deleteMany({ where: { blokId: blokLama.id } });
-    }
-
-    await prisma.blokWawancara.delete({ where: { id: blokLama.id } });
-    console.log(`Blok lama "${kode}" (placeholder) beserta jawabannya berhasil dihapus.`);
+    console.log("Semua data kuesioner lama berhasil dihapus.");
 }
 
 async function main() {
-    await hapusBlokLama("D");
+    await hapusSemuaDataKuesioner();
 
+    console.log("\nMemulai proses seed data baru...");
     for (let i = 0; i < SEMUA_BLOK.length; i++) {
         await seedBlok(SEMUA_BLOK[i], i);
     }

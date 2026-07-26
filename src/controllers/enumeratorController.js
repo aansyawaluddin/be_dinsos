@@ -1,3 +1,5 @@
+import fs from "fs";
+import path from "path";
 import prisma from "../lib/prisma.js";
 import { success, error } from "../utils/response.js";
 import {
@@ -233,6 +235,35 @@ export async function submitWawancara(req, res) {
         }
         if (kosong) continue;
 
+        if (soal.jenis === "TEKS" || soal.jenis === "ANGKA") {
+            if (Array.isArray(nilai)) {
+                errors.push(`${soal.kode}: harus berupa nilai tunggal, bukan daftar`);
+                continue;
+            }
+
+            if (soal.jenis === "ANGKA") {
+                const angka = Number(nilai);
+                if (Number.isNaN(angka)) {
+                    errors.push(`${soal.kode}: harus berupa angka yang valid`);
+                    continue;
+                }
+                jawabanValid.push({
+                    pertanyaanId: soal.id,
+                    kodePertanyaan: soal.kode,
+                    tipe: "NILAI",
+                    nilaiTeks: String(angka),
+                });
+            } else {
+                jawabanValid.push({
+                    pertanyaanId: soal.id,
+                    kodePertanyaan: soal.kode,
+                    tipe: "NILAI",
+                    nilaiTeks: String(nilai),
+                });
+            }
+            continue;
+        }
+
         const nilaiArray = Array.isArray(nilai) ? nilai.map(String) : [String(nilai)];
 
         if (soal.jenis === "PILIHAN_TUNGGAL" && nilaiArray.length > 1) {
@@ -250,6 +281,7 @@ export async function submitWawancara(req, res) {
         jawabanValid.push({
             pertanyaanId: soal.id,
             kodePertanyaan: soal.kode,
+            tipe: "OPSI",
             opsiIds: soal.opsi.filter((o) => nilaiArray.includes(o.kode)).map((o) => o.id),
         });
     }
@@ -265,12 +297,30 @@ export async function submitWawancara(req, res) {
                 where: { wargaId_pertanyaanId: { wargaId: id, pertanyaanId: jv.pertanyaanId } },
             });
 
+            if (jv.tipe === "NILAI") {
+                if (existing) {
+                    await tx.jawabanOpsiDipilih.deleteMany({ where: { jawabanId: existing.id } });
+                    await tx.jawabanWawancara.update({
+                        where: { id: existing.id },
+                        data: { nilaiTeks: jv.nilaiTeks },
+                    });
+                } else {
+                    await tx.jawabanWawancara.create({
+                        data: { wargaId: id, pertanyaanId: jv.pertanyaanId, nilaiTeks: jv.nilaiTeks },
+                    });
+                }
+                continue;
+            }
+
             const jawabanRecord = existing
                 ? existing
                 : await tx.jawabanWawancara.create({ data: { wargaId: id, pertanyaanId: jv.pertanyaanId } });
 
             if (existing) {
                 await tx.jawabanOpsiDipilih.deleteMany({ where: { jawabanId: existing.id } });
+                if (existing.nilaiTeks !== null) {
+                    await tx.jawabanWawancara.update({ where: { id: existing.id }, data: { nilaiTeks: null } });
+                }
             }
 
             await tx.jawabanOpsiDipilih.createMany({
@@ -342,13 +392,19 @@ export async function getHasilWawancara(req, res) {
             pertanyaan: true,
             opsiDipilih: { include: { opsi: true } },
         },
-        orderBy: { pertanyaan: { urutan: "asc" } },
+        orderBy: [
+            { pertanyaan: { blok: { urutan: "asc" } } }, 
+            { pertanyaan: { urutan: "asc" } }            
+        ],
     });
 
     const ringkasanJawaban = jawabanList.map((j) => ({
         kode: j.pertanyaan.kode,
         pertanyaan: j.pertanyaan.variabel,
-        jawaban: j.opsiDipilih.map((od) => od.opsi.label).join(", "),
+        jawaban:
+            j.opsiDipilih.length > 0
+                ? j.opsiDipilih.map((od) => od.opsi.label).join(", ")
+                : j.nilaiTeks ?? "-",
     }));
 
     return success(res, {

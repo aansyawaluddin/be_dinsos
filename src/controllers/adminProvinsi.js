@@ -659,7 +659,9 @@ async function getDataSurveiForExport(kabupatenKota) {
     const rows = wargaList.map((w) => {
         const jawabanMap = {};
         w.jawabanWawancara.forEach((j) => {
-            jawabanMap[j.pertanyaan.kode] = j.opsiDipilih.map((od) => od.opsi.label).join(", ");
+            jawabanMap[j.pertanyaan.kode] = j.opsiDipilih.length > 0
+                ? j.opsiDipilih.map((od) => od.opsi.label).join(", ")
+                : (j.nilaiTeks ?? "-");
         });
         return { nik: w.nik, nama: w.nama, jawabanMap };
     });

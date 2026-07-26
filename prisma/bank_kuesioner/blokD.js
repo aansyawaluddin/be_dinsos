@@ -270,13 +270,12 @@ export const BLOK_D = {
             aturan: "Diisi hanya jika D16 = 'Ya'",
         },
 
-        // D17 -- pengeluaran per bulan (dipecah dari tabel jadi 7 sub-pertanyaan)
-        { kode: "D17a", variabel: "Pengeluaran per bulan -- Pangan/makanan (Rp)", jenis: "ANGKA", wajib: false, aturan: "Bagian dari D17" },
-        { kode: "D17b", variabel: "Pengeluaran per bulan -- Pendidikan anak (Rp)", jenis: "ANGKA", wajib: false, aturan: "Bagian dari D17" },
-        { kode: "D17c", variabel: "Pengeluaran per bulan -- Kesehatan (Rp)", jenis: "ANGKA", wajib: false, aturan: "Bagian dari D17" },
-        { kode: "D17d", variabel: "Pengeluaran per bulan -- Listrik/air/bahan bakar (Rp)", jenis: "ANGKA", wajib: false, aturan: "Bagian dari D17" },
-        { kode: "D17e", variabel: "Pengeluaran per bulan -- Transportasi (Rp)", jenis: "ANGKA", wajib: false, aturan: "Bagian dari D17" },
-        { kode: "D17f", variabel: "Pengeluaran per bulan -- Cicilan/hutang (Rp)", jenis: "ANGKA", wajib: false, aturan: "Bagian dari D17" },
-        { kode: "D17g", variabel: "Pengeluaran per bulan -- Lainnya (Rp)", jenis: "ANGKA", wajib: false, aturan: "Bagian dari D17" },
+        { kode: "D17a", variabel: "Pengeluaran per bulan\nPangan/makanan (Rp)", jenis: "ANGKA", wajib: false, aturan: "Bagian dari D17" },
+        { kode: "D17b", variabel: "Pengeluaran per bulan\nPendidikan anak (Rp)", jenis: "ANGKA", wajib: false, aturan: "Bagian dari D17" },
+        { kode: "D17c", variabel: "Pengeluaran per bulan\nKesehatan (Rp)", jenis: "ANGKA", wajib: false, aturan: "Bagian dari D17" },
+        { kode: "D17d", variabel: "Pengeluaran per bulan\nListrik/air/bahan bakar (Rp)", jenis: "ANGKA", wajib: false, aturan: "Bagian dari D17" },
+        { kode: "D17e", variabel: "Pengeluaran per bulan\nTransportasi (Rp)", jenis: "ANGKA", wajib: false, aturan: "Bagian dari D17" },
+        { kode: "D17f", variabel: "Pengeluaran per bulan\nCicilan/hutang (Rp)", jenis: "ANGKA", wajib: false, aturan: "Bagian dari D17" },
+        { kode: "D17g", variabel: "Pengeluaran per bulan\nLainnya (Rp)", jenis: "ANGKA", wajib: false, aturan: "Bagian dari D17" },
     ],
 };
