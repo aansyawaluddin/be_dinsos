@@ -455,7 +455,7 @@ const USERNAME_REGEX = /^[a-zA-Z0-9._]+$/;
 export async function createSurveyor(req, res) {
     const nama = clean(req.body.nama);
     const usernameRaw = clean(req.body.username);
-    const wilayahTugas = clean(req.body.wilayahTugas); 
+    const kecamatanTugas = clean(req.body.kecamatanTugas);
     const kabupatenKotaRaw = clean(req.body.kabupatenKota);
     const nomorHp = clean(req.body.nomorHp);
 
@@ -465,8 +465,8 @@ export async function createSurveyor(req, res) {
     if (!usernameRaw) {
         return error(res, "Username login wajib diisi", 400);
     }
-    if (!wilayahTugas) {
-        return error(res, "Wilayah tugas (kecamatan) wajib diisi", 400);
+    if (!kecamatanTugas) {
+        return error(res, "Kecamatan tugas wajib diisi", 400);
     }
     if (!kabupatenKotaRaw) {
         return error(res, "Kabupaten/Kota wajib diisi", 400);
@@ -488,7 +488,7 @@ export async function createSurveyor(req, res) {
         data: {
             nama,
             username,
-            wilayahTugas,
+            kecamatanTugas,
             kabupatenKota,
             nomorHp,
             password: hashedPassword,
@@ -502,7 +502,7 @@ export async function createSurveyor(req, res) {
             id: surveyor.id,
             nama: surveyor.nama,
             username: surveyor.username,
-            wilayahTugas: surveyor.wilayahTugas,
+            kecamatanTugas: surveyor.kecamatanTugas,
             kabupatenKota: surveyor.kabupatenKota,
             nomorHp: surveyor.nomorHp,
             aktif: surveyor.aktif,
