@@ -455,7 +455,8 @@ const USERNAME_REGEX = /^[a-zA-Z0-9._]+$/;
 export async function createSurveyor(req, res) {
     const nama = clean(req.body.nama);
     const usernameRaw = clean(req.body.username);
-    const wilayahTugasRaw = clean(req.body.wilayahTugas);
+    const wilayahTugas = clean(req.body.wilayahTugas); 
+    const kabupatenKotaRaw = clean(req.body.kabupatenKota);
     const nomorHp = clean(req.body.nomorHp);
 
     if (!nama) {
@@ -464,20 +465,21 @@ export async function createSurveyor(req, res) {
     if (!usernameRaw) {
         return error(res, "Username login wajib diisi", 400);
     }
+    if (!wilayahTugas) {
+        return error(res, "Wilayah tugas (kecamatan) wajib diisi", 400);
+    }
+    if (!kabupatenKotaRaw) {
+        return error(res, "Kabupaten/Kota wajib diisi", 400);
+    }
 
     const username = usernameRaw.toLowerCase();
     if (!USERNAME_REGEX.test(username)) {
         return error(res, "Username hanya boleh huruf, angka, titik, dan underscore (tanpa spasi)", 400);
     }
 
-    let kabupatenKota = null;
-    let wilayahTugas = null;
-    if (wilayahTugasRaw) {
-        kabupatenKota = resolveKabupatenKota(wilayahTugasRaw);
-        if (!kabupatenKota) {
-            return error(res, `Wilayah tugas "${wilayahTugasRaw}" tidak dikenali`, 400);
-        }
-        wilayahTugas = mapKabupatenLabel(kabupatenKota);
+    const kabupatenKota = resolveKabupatenKota(kabupatenKotaRaw);
+    if (!kabupatenKota) {
+        return error(res, `Kabupaten/Kota "${kabupatenKotaRaw}" tidak dikenali`, 400);
     }
 
     const hashedPassword = await hashPassword(DEFAULT_SURVEYOR_PASSWORD);

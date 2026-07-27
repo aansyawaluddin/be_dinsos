@@ -9,7 +9,7 @@ const SKALA_AKSES_FASILITAS = [
 function aksesFasilitas(kode, namaFasilitas) {
     return {
         kode,
-        variabel: `Kemudahan akses -- ${namaFasilitas}`,
+        variabel: `${namaFasilitas}`,
         jenis: "PILIHAN_TUNGGAL",
         wajib: true,
         aturan: null,
