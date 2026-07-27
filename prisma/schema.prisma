@@ -51,7 +51,7 @@ model User {
   nama          String
   username      String         @unique
   nomorHp       String?
-  wilayahTugas  String? 
+  kecamatanTugas String?
   password      String
   tokenVersion  Int            @default(0)
   role          Role
