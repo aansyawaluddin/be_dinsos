@@ -25,6 +25,8 @@ const BULAN_INDONESIA = [
     "Juli", "Agustus", "September", "Oktober", "November", "Desember",
 ];
 
+const UPLOAD_ROOT = path.join(process.cwd(), "uploads");
+
 function formatTanggalIndonesia(date) {
     const d = date instanceof Date ? date : new Date(date);
     return `${d.getDate()} ${BULAN_INDONESIA[d.getMonth()]} ${d.getFullYear()}`;
@@ -39,6 +41,10 @@ async function getSurveyorRegion(userId) {
 
 function wilayahLengkap(surveyor) {
     return Boolean(surveyor?.kabupatenKota && surveyor?.kecamatanTugas);
+}
+
+function unlinkSafe(filePath) {
+    if (filePath) fs.unlink(filePath, () => { });
 }
 
 export async function getDashboard(req, res) {
@@ -197,20 +203,43 @@ export async function submitWawancara(req, res) {
         return error(res, "ID warga tidak valid", 400);
     }
 
-    if (!req.file) {
-        return error(res, "Foto dokumentasi wajib diupload", 400);
+    const fotoFile = req.files?.foto?.[0];
+    const fotoRumahFile = req.files?.fotoRumah?.[0];
+    const ttdRespondenFile = req.files?.tandaTanganResponden?.[0];
+    const ttdEnumeratorFile = req.files?.tandaTanganEnumerator?.[0];
+
+    const semuaFileUploaded = [fotoFile, fotoRumahFile, ttdRespondenFile, ttdEnumeratorFile];
+    function unlinkSemuaFile() {
+        semuaFileUploaded.forEach((f) => unlinkSafe(f?.path));
+    }
+
+    if (!fotoFile) {
+        unlinkSemuaFile();
+        return error(res, "Foto dokumentasi wawancara wajib diupload", 400);
+    }
+    if (!fotoRumahFile) {
+        unlinkSemuaFile();
+        return error(res, "Foto rumah wajib diupload", 400);
+    }
+    if (!ttdRespondenFile) {
+        unlinkSemuaFile();
+        return error(res, "Tanda tangan responden wajib diupload", 400);
+    }
+    if (!ttdEnumeratorFile) {
+        unlinkSemuaFile();
+        return error(res, "Tanda tangan enumerator wajib diupload", 400);
     }
 
     let jawaban;
     try {
         jawaban = typeof req.body.jawaban === "string" ? JSON.parse(req.body.jawaban) : req.body.jawaban;
     } catch (err) {
-        fs.unlink(req.file.path, () => { });
+        unlinkSemuaFile();
         return error(res, 'Field "jawaban" harus berupa JSON string yang valid', 400);
     }
 
     if (!jawaban || typeof jawaban !== "object" || Array.isArray(jawaban)) {
-        fs.unlink(req.file.path, () => { });
+        unlinkSemuaFile();
         return error(res, "Jawaban wawancara wajib diisi", 400);
     }
 
@@ -222,7 +251,7 @@ export async function submitWawancara(req, res) {
     ]);
 
     if (!warga) {
-        fs.unlink(req.file.path, () => { });
+        unlinkSemuaFile();
         return error(res, "Data warga tidak ditemukan", 404);
     }
     if (
@@ -230,7 +259,7 @@ export async function submitWawancara(req, res) {
         warga.kabupatenKota !== surveyor.kabupatenKota ||
         warga.kecamatan !== surveyor.kecamatanTugas
     ) {
-        fs.unlink(req.file.path, () => { });
+        unlinkSemuaFile();
         return error(res, "Warga ini di luar wilayah tugas Anda", 403);
     }
 
@@ -307,7 +336,7 @@ export async function submitWawancara(req, res) {
     }
 
     if (errors.length > 0) {
-        fs.unlink(req.file.path, () => { });
+        unlinkSemuaFile();
         return error(res, "Jawaban tidak valid", 400, errors);
     }
 
@@ -351,7 +380,12 @@ export async function submitWawancara(req, res) {
 
     const hasLatitude = latitude !== undefined && latitude !== null && latitude !== "";
     const hasLongitude = longitude !== undefined && longitude !== null && longitude !== "";
-    const fotoPathBaru = `foto-wawancara/${req.file.filename}`;
+
+    // Path relatif terhadap folder uploads/, otomatis "warga/{nik}/foto_....jpg" dsb
+    const fotoPathBaru = path.relative(UPLOAD_ROOT, fotoFile.path);
+    const fotoRumahPathBaru = path.relative(UPLOAD_ROOT, fotoRumahFile.path);
+    const ttdRespondenPathBaru = path.relative(UPLOAD_ROOT, ttdRespondenFile.path);
+    const ttdEnumeratorPathBaru = path.relative(UPLOAD_ROOT, ttdEnumeratorFile.path);
 
     const updated = await prisma.warga.update({
         where: { id },
@@ -360,14 +394,26 @@ export async function submitWawancara(req, res) {
             tanggalWawancara: new Date(),
             diwawancaraOlehId: surveyorId,
             fotoDokumentasi: fotoPathBaru,
+            fotoRumah: fotoRumahPathBaru,
+            tandaTanganResponden: ttdRespondenPathBaru,
+            tandaTanganEnumerator: ttdEnumeratorPathBaru,
             ...(hasLatitude ? { latitude: Number(latitude) } : {}),
             ...(hasLongitude ? { longitude: Number(longitude) } : {}),
         },
     });
 
+    // Hapus file lama kalau diganti dengan yang baru
     if (warga.fotoDokumentasi && warga.fotoDokumentasi !== fotoPathBaru) {
-        const fotoLamaPath = path.join(process.cwd(), "uploads", warga.fotoDokumentasi);
-        fs.unlink(fotoLamaPath, () => { });
+        unlinkSafe(path.join(UPLOAD_ROOT, warga.fotoDokumentasi));
+    }
+    if (warga.fotoRumah && warga.fotoRumah !== fotoRumahPathBaru) {
+        unlinkSafe(path.join(UPLOAD_ROOT, warga.fotoRumah));
+    }
+    if (warga.tandaTanganResponden && warga.tandaTanganResponden !== ttdRespondenPathBaru) {
+        unlinkSafe(path.join(UPLOAD_ROOT, warga.tandaTanganResponden));
+    }
+    if (warga.tandaTanganEnumerator && warga.tandaTanganEnumerator !== ttdEnumeratorPathBaru) {
+        unlinkSafe(path.join(UPLOAD_ROOT, warga.tandaTanganEnumerator));
     }
 
     return success(
@@ -378,6 +424,9 @@ export async function submitWawancara(req, res) {
             statusWawancara: updated.statusWawancara,
             statusLabel: STATUS_LABEL[updated.statusWawancara],
             fotoDokumentasi: updated.fotoDokumentasi,
+            fotoRumah: updated.fotoRumah,
+            tandaTanganResponden: updated.tandaTanganResponden,
+            tandaTanganEnumerator: updated.tandaTanganEnumerator,
             latitude: updated.latitude,
             longitude: updated.longitude,
         },
@@ -395,7 +444,17 @@ export async function getHasilWawancara(req, res) {
         getSurveyorRegion(req.user.id),
         prisma.warga.findUnique({
             where: { id },
-            select: { id: true, nik: true, nama: true, kabupatenKota: true, kecamatan: true, fotoDokumentasi: true },
+            select: {
+                id: true,
+                nik: true,
+                nama: true,
+                kabupatenKota: true,
+                kecamatan: true,
+                fotoDokumentasi: true,
+                fotoRumah: true,
+                tandaTanganResponden: true,
+                tandaTanganEnumerator: true,
+            },
         }),
     ]);
 
@@ -435,6 +494,9 @@ export async function getHasilWawancara(req, res) {
         nik: warga.nik,
         nama: warga.nama,
         foto: warga.fotoDokumentasi ? `/uploads/${warga.fotoDokumentasi}` : null,
+        fotoRumah: warga.fotoRumah ? `/uploads/${warga.fotoRumah}` : null,
+        tandaTanganResponden: warga.tandaTanganResponden ? `/uploads/${warga.tandaTanganResponden}` : null,
+        tandaTanganEnumerator: warga.tandaTanganEnumerator ? `/uploads/${warga.tandaTanganEnumerator}` : null,
         ringkasanJawaban,
     });
 }

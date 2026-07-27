@@ -101,6 +101,9 @@ model Warga {
   latitude          Float?
   longitude         Float?
   fotoDokumentasi   String?
+  fotoRumah         String?
+  tandaTanganResponden   String?
+  tandaTanganEnumerator  String?
 
   createdById Int?
   createdAt   DateTime @default(now())

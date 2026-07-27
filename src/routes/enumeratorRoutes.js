@@ -16,7 +16,12 @@ router.post(
     "/warga/:id/wawancara",
     authenticate,
     authorize("ENUMERATOR"),
-    uploadFoto.single("foto"),
+    uploadFoto.fields([
+        { name: "foto", maxCount: 1 },
+        { name: "fotoRumah", maxCount: 1 },
+        { name: "tandaTanganResponden", maxCount: 1 },
+        { name: "tandaTanganEnumerator", maxCount: 1 },
+    ]),
     asyncHandler(ctrl.submitWawancara)
 );
 
