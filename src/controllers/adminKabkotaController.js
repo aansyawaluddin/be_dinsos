@@ -1,7 +1,17 @@
+import XLSX from "xlsx";
+import PDFDocument from "pdfkit";
+import path from "path";
+import fs from "fs";
 import prisma from "../lib/prisma.js";
 import { success, error } from "../utils/response.js";
 import {
+    mapKabupaten,
     mapKabupatenLabel,
+    mapJenisKelamin,
+    mapJenisKelaminLabel,
+    parseTanggalLahir,
+    formatTanggalLahir,
+    statusBansos,
     extractDesil,
     getInitials,
     hitungUsia,
@@ -9,7 +19,10 @@ import {
     formatDesilLabel,
     formatRtRw,
     formatSkor,
+    clean,
 } from "../utils/wargaMapper.js";
+
+const UPLOAD_DIR = path.join(process.cwd(), "uploads");
 
 const STATUS_WAWANCARA_LABEL = {
     SUDAH_DIWAWANCARA: "Sudah Disurvei",
@@ -322,4 +335,414 @@ export async function getSebaranWilayah(req, res) {
         },
         peta,
     });
+}
+
+// ============================================================
+// UPLOAD & IMPORT EXCEL (dikunci ke wilayah admin ini saja)
+// ============================================================
+
+function readAndMapRows(filePath, kabupatenKotaAdmin) {
+    const workbook = XLSX.readFile(filePath, { cellDates: true });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rawRows = XLSX.utils.sheet_to_json(sheet, { defval: null });
+
+    return rawRows.map((row, idx) => {
+        const rowNumber = idx + 2;
+        const kabupatenLabel = clean(row["KABUPATEN"]);
+        const kabupatenKotaExcel = mapKabupaten(row["KABUPATEN"]);
+        const kecamatan = clean(row["KECAMATAN"]);
+        const desaKelurahan = clean(row["DESA_KELURAHAN"]);
+        const nomorKK = clean(row["nomor kartu keluarga"]);
+        const nik = clean(row["nomor induk kependudukan"]);
+        const nama = clean(row["nama"]);
+
+        const fieldErrors = [];
+        if (!kabupatenKotaExcel) {
+            fieldErrors.push(`KABUPATEN "${row["KABUPATEN"] ?? ""}" tidak dikenali`);
+        } else if (kabupatenKotaExcel !== kabupatenKotaAdmin) {
+            fieldErrors.push(
+                `Baris ini untuk wilayah "${kabupatenLabel}", di luar wilayah Anda (${mapKabupatenLabel(kabupatenKotaAdmin)})`
+            );
+        }
+        if (!kecamatan) fieldErrors.push("Kecamatan kosong");
+        if (!desaKelurahan) fieldErrors.push("Desa/Kelurahan kosong");
+        if (!nomorKK) fieldErrors.push("Nomor KK kosong");
+        if (!nama) fieldErrors.push("Nama kosong");
+
+        return {
+            rowNumber,
+            kabupatenLabel,
+            fieldErrors,
+            dbData: {
+                kabupatenKota: kabupatenKotaAdmin, // dipaksa sesuai wilayah admin yang login, bukan dari isi file
+                kecamatan,
+                desaKelurahan,
+                alamat: clean(row["alamat"]),
+                rw: clean(row["rw"]),
+                rt: clean(row["rt"]),
+                desilTerbaru: clean(row["desil terbaru"]),
+                nomorKK,
+                nik,
+                nama,
+                jenisKelamin: mapJenisKelamin(row["jenis kelamin"]),
+                tanggalLahir: parseTanggalLahir(row["tanggal lahir"]),
+                tempatLahir: clean(row["tempat lahir"]),
+                statusPerkawinan: clean(row["status perkawinan"]),
+                hubunganKeluarga: clean(row["hubungan keluarga"]),
+                keberadaanAnggotaKeluarga: clean(row["keberadaan anggota keluarga"]),
+                disabilitas: clean(row["disabilitas"]),
+                keteranganDisabilitas: clean(row["keterangan disabilitas"]),
+                pbiJk: clean(row["PBI-JK"]),
+                bansosPkh: clean(row["BANSOS PKH"]),
+                bansosSembako: clean(row["BANSOS SEMBAKO"]),
+            },
+        };
+    });
+}
+
+async function analyzeRows(mappedRows) {
+    const nikCount = {};
+    mappedRows.forEach((r) => {
+        if (r.dbData.nik) nikCount[r.dbData.nik] = (nikCount[r.dbData.nik] || 0) + 1;
+    });
+
+    const niksInFile = [...new Set(mappedRows.map((r) => r.dbData.nik).filter(Boolean))];
+    const existing = niksInFile.length
+        ? await prisma.warga.findMany({
+            where: { nik: { in: niksInFile } },
+            select: { nik: true },
+        })
+        : [];
+    const existingNikSet = new Set(existing.map((w) => w.nik));
+
+    let siapDiimpor = 0;
+    let duplikatNik = 0;
+    let nikKosong = 0;
+    let tidakValid = 0;
+
+    const preview = mappedRows.map((r, idx) => {
+        const { rowNumber, dbData, kabupatenLabel, fieldErrors } = r;
+        const isNikKosong = !dbData.nik;
+        const isDuplicateInFile = dbData.nik ? nikCount[dbData.nik] > 1 : false;
+        const isDuplicateInDb = dbData.nik ? existingNikSet.has(dbData.nik) : false;
+        const isDuplicate = isDuplicateInFile || isDuplicateInDb;
+        const hasFieldErrors = fieldErrors.length > 0;
+
+        const bisaDiimpor = !isNikKosong && !isDuplicate && !hasFieldErrors;
+
+        let status = "SIAP";
+        let alasan = null;
+        if (isNikKosong) {
+            status = "NIK_KOSONG";
+            alasan = "NIK kosong";
+            nikKosong++;
+        } else if (isDuplicate) {
+            status = "DUPLIKAT";
+            alasan = isDuplicateInDb
+                ? "NIK sudah terdaftar di database"
+                : "NIK duplikat dengan baris lain di file ini";
+            duplikatNik++;
+        } else if (hasFieldErrors) {
+            status = "TIDAK_VALID";
+            alasan = fieldErrors.join("; ");
+            tidakValid++;
+        } else {
+            siapDiimpor++;
+        }
+
+        return {
+            nomor: idx + 1,
+            nik: dbData.nik,
+            nama: dbData.nama,
+            kelDesa: dbData.desaKelurahan,
+            kecamatan: dbData.kecamatan,
+            kabupaten: kabupatenLabel,
+            jenisKelamin: mapJenisKelaminLabel(dbData.jenisKelamin),
+            tanggalLahir: formatTanggalLahir(dbData.tanggalLahir),
+            hubunganKeluarga: dbData.hubunganKeluarga,
+            desil: extractDesil(dbData.desilTerbaru),
+            pkh: statusBansos(dbData.bansosPkh),
+            sembako: statusBansos(dbData.bansosSembako),
+            bisaDiimpor,
+            status,
+            alasan,
+        };
+    });
+
+    return {
+        preview,
+        stats: {
+            totalBaris: mappedRows.length,
+            siapDiimpor,
+            duplikatNik,
+            nikKosong,
+            tidakValid,
+        },
+    };
+}
+
+export async function previewUpload(req, res) {
+    const kabupatenKota = requireRegion(req, res);
+    if (!kabupatenKota) return;
+
+    if (!req.file) {
+        return error(res, "File Excel wajib diupload (field: file)", 400);
+    }
+
+    let mappedRows;
+    try {
+        mappedRows = readAndMapRows(req.file.path, kabupatenKota);
+    } catch (err) {
+        fs.unlink(req.file.path, () => { });
+        return error(res, "Gagal membaca file Excel, pastikan formatnya sesuai template", 400);
+    }
+
+    if (mappedRows.length === 0) {
+        fs.unlink(req.file.path, () => { });
+        return error(res, "File Excel kosong atau format tidak sesuai", 400);
+    }
+
+    const { preview, stats } = await analyzeRows(mappedRows);
+
+    return success(
+        res,
+        {
+            uploadId: req.file.filename,
+            namaFile: req.file.originalname,
+            stats,
+            preview,
+        },
+        "Preview data warga berhasil dibuat"
+    );
+}
+
+export async function importWarga(req, res) {
+    const kabupatenKota = requireRegion(req, res);
+    if (!kabupatenKota) return;
+
+    const { uploadId } = req.params;
+    const safeName = path.basename(uploadId || "");
+    const filePath = path.join(UPLOAD_DIR, safeName);
+
+    if (!safeName || !fs.existsSync(filePath)) {
+        return error(res, "File upload tidak ditemukan atau sudah kedaluwarsa, silakan upload ulang", 404);
+    }
+
+    const mappedRows = readAndMapRows(filePath, kabupatenKota);
+    const { preview, stats } = await analyzeRows(mappedRows);
+
+    const rowsToImport = mappedRows.filter((_, idx) => preview[idx].bisaDiimpor);
+
+    let berhasil = 0;
+    const gagalImport = [];
+
+    for (const r of rowsToImport) {
+        try {
+            await prisma.warga.create({
+                data: {
+                    ...r.dbData,
+                    createdById: req.user.id,
+                },
+            });
+            berhasil++;
+        } catch (err) {
+            gagalImport.push({ rowNumber: r.rowNumber, reason: err.message });
+        }
+    }
+
+    fs.unlink(filePath, () => { });
+
+    return success(
+        res,
+        {
+            totalBaris: stats.totalBaris,
+            diproses: rowsToImport.length,
+            berhasil,
+            gagal: gagalImport.length,
+            dilewati: stats.duplikatNik + stats.nikKosong + stats.tidakValid,
+            errors: gagalImport,
+        },
+        "Import data warga selesai",
+        201
+    );
+}
+
+export async function cancelUpload(req, res) {
+    const { uploadId } = req.params;
+    const safeName = path.basename(uploadId || "");
+    const filePath = path.join(UPLOAD_DIR, safeName);
+
+    if (safeName && fs.existsSync(filePath)) {
+        fs.unlink(filePath, () => { });
+    }
+
+    return success(res, null, "Upload dibatalkan");
+}
+
+// ============================================================
+// EXPORT EXCEL & PDF (dikunci ke wilayah admin ini saja)
+// ============================================================
+
+async function getDataSurveiForExport(kabupatenKota) {
+    const whereWarga = { statusWawancara: "SUDAH_DIWAWANCARA", kabupatenKota };
+
+    const [wargaList, semuaPertanyaan] = await Promise.all([
+        prisma.warga.findMany({
+            where: whereWarga,
+            select: {
+                nik: true,
+                nama: true,
+                jawabanWawancara: {
+                    include: {
+                        pertanyaan: true,
+                        opsiDipilih: { include: { opsi: true } },
+                    },
+                },
+            },
+            orderBy: { nama: "asc" },
+        }),
+        prisma.pertanyaanWawancara.findMany({
+            orderBy: [{ blok: { urutan: "asc" } }, { urutan: "asc" }],
+            select: { kode: true, variabel: true },
+        }),
+    ]);
+
+    const rows = wargaList.map((w) => {
+        const jawabanMap = {};
+        w.jawabanWawancara.forEach((j) => {
+            jawabanMap[j.pertanyaan.kode] = j.opsiDipilih.length > 0
+                ? j.opsiDipilih.map((od) => od.opsi.label).join(", ")
+                : (j.nilaiTeks ?? "-");
+        });
+        return { nik: w.nik, nama: w.nama, jawabanMap };
+    });
+
+    return { rows, semuaPertanyaan };
+}
+
+export async function exportExcel(req, res) {
+    const kabupatenKota = requireRegion(req, res);
+    if (!kabupatenKota) return;
+
+    const { rows, semuaPertanyaan } = await getDataSurveiForExport(kabupatenKota);
+
+    if (rows.length === 0) {
+        return error(res, "Belum ada data warga yang sudah disurvei untuk wilayah ini", 404);
+    }
+
+    const headers = ["NIK", "Nama", ...semuaPertanyaan.map((p) => `${p.kode} - ${p.variabel}`)];
+    const dataRows = rows.map((r) => [
+        r.nik,
+        r.nama,
+        ...semuaPertanyaan.map((p) => r.jawabanMap[p.kode] ?? "-"),
+    ]);
+
+    const worksheet = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
+    worksheet["!cols"] = headers.map((h, i) => ({ wch: i < 2 ? 22 : 28 }));
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Data Survei");
+
+    const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
+
+    const labelWilayah = mapKabupatenLabel(kabupatenKota) ?? kabupatenKota;
+    res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader("Content-Disposition", `attachment; filename="data-survei-${labelWilayah}-${Date.now()}.xlsx"`);
+    return res.send(buffer);
+}
+
+function hitungLebarKolom(jumlahKolomSoal, totalWidth) {
+    const lebarNik = 85;
+    const lebarNama = 110;
+    const sisaWidth = totalWidth - lebarNik - lebarNama;
+    const lebarPerSoal = jumlahKolomSoal > 0 ? sisaWidth / jumlahKolomSoal : 0;
+    return [lebarNik, lebarNama, ...Array(jumlahKolomSoal).fill(lebarPerSoal)];
+}
+
+function potongTeks(doc, text, maxWidth) {
+    const str = String(text ?? "");
+    if (doc.widthOfString(str) <= maxWidth) return str;
+    let hasil = str;
+    while (hasil.length > 1 && doc.widthOfString(hasil + "...") > maxWidth) {
+        hasil = hasil.slice(0, -1);
+    }
+    return hasil + "...";
+}
+
+export async function exportPdf(req, res) {
+    const kabupatenKota = requireRegion(req, res);
+    if (!kabupatenKota) return;
+
+    const { rows, semuaPertanyaan } = await getDataSurveiForExport(kabupatenKota);
+
+    if (rows.length === 0) {
+        return error(res, "Belum ada data warga yang sudah disurvei untuk wilayah ini", 404);
+    }
+
+    const labelWilayah = mapKabupatenLabel(kabupatenKota) ?? kabupatenKota;
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="data-survei-${labelWilayah}-${Date.now()}.pdf"`);
+
+    const doc = new PDFDocument({ margin: 30, size: "A4", layout: "landscape" });
+    doc.pipe(res);
+
+    const marginLeft = doc.page.margins.left;
+    const marginTop = doc.page.margins.top;
+    const usableWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+    const batasBawah = doc.page.height - doc.page.margins.bottom;
+    const tinggiBaris = 16;
+    const paddingKolom = 4;
+
+    const headers = ["NIK", "Nama", ...semuaPertanyaan.map((p) => p.kode)];
+    const lebarKolom = hitungLebarKolom(semuaPertanyaan.length, usableWidth);
+
+    doc.fontSize(14).font("Helvetica-Bold").text(`Data Warga yang Sudah Disurvei - ${labelWilayah}`, { align: "left" });
+    doc.fontSize(8).font("Helvetica");
+    semuaPertanyaan.forEach((p) => {
+        doc.text(`${p.kode} = ${p.variabel}`);
+    });
+    doc.moveDown(0.5);
+
+    let y = doc.y;
+
+    function gambarHeader() {
+        let x = marginLeft;
+        doc.font("Helvetica-Bold").fontSize(8);
+        headers.forEach((h, i) => {
+            const teks = potongTeks(doc, h, lebarKolom[i] - paddingKolom);
+            doc.text(teks, x, y, { lineBreak: false });
+            x += lebarKolom[i];
+        });
+        y += tinggiBaris;
+        doc.moveTo(marginLeft, y - 3)
+            .lineTo(marginLeft + usableWidth, y - 3)
+            .strokeColor("#cccccc")
+            .stroke();
+        doc.font("Helvetica").fontSize(8);
+    }
+
+    gambarHeader();
+
+    rows.forEach((r) => {
+        if (y + tinggiBaris > batasBawah) {
+            doc.addPage();
+            y = marginTop;
+            gambarHeader();
+        }
+
+        let x = marginLeft;
+        const nilaiBaris = [r.nik, r.nama, ...semuaPertanyaan.map((p) => r.jawabanMap[p.kode] ?? "-")];
+        nilaiBaris.forEach((v, i) => {
+            const teks = potongTeks(doc, v, lebarKolom[i] - paddingKolom);
+            doc.text(teks, x, y, { lineBreak: false });
+            x += lebarKolom[i];
+        });
+        y += tinggiBaris;
+    });
+
+    doc.end();
 }
