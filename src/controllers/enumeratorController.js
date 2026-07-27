@@ -33,19 +33,24 @@ function formatTanggalIndonesia(date) {
 async function getSurveyorRegion(userId) {
     return prisma.user.findUnique({
         where: { id: userId },
-        select: { nama: true, wilayahTugas: true, kabupatenKota: true },
+        select: { nama: true, kecamatanTugas: true, kabupatenKota: true },
     });
+}
+
+function wilayahLengkap(surveyor) {
+    return Boolean(surveyor?.kabupatenKota && surveyor?.kecamatanTugas);
 }
 
 export async function getDashboard(req, res) {
     const surveyor = await getSurveyorRegion(req.user.id);
 
-    if (!surveyor?.kabupatenKota) {
+    if (!wilayahLengkap(surveyor)) {
         return success(
             res,
             {
                 nama: surveyor?.nama ?? null,
-                wilayahTugas: null,
+                kabupatenKota: surveyor?.kabupatenKota ?? null,
+                kecamatanTugas: null,
                 tanggal: formatTanggalIndonesia(new Date()),
                 progress: { totalTugas: 0, selesai: 0, belum: 0, persentase: 0 },
             },
@@ -53,7 +58,10 @@ export async function getDashboard(req, res) {
         );
     }
 
-    const where = { kabupatenKota: surveyor.kabupatenKota };
+    const where = {
+        kabupatenKota: surveyor.kabupatenKota,
+        kecamatan: surveyor.kecamatanTugas,
+    };
     const [total, selesai] = await Promise.all([
         prisma.warga.count({ where }),
         prisma.warga.count({ where: { ...where, statusWawancara: "SUDAH_DIWAWANCARA" } }),
@@ -64,7 +72,8 @@ export async function getDashboard(req, res) {
 
     return success(res, {
         nama: surveyor.nama,
-        wilayahTugas: surveyor.wilayahTugas,
+        kabupatenKota: surveyor.kabupatenKota,
+        kecamatanTugas: surveyor.kecamatanTugas,
         tanggal: formatTanggalIndonesia(new Date()),
         progress: { totalTugas: total, selesai, belum, persentase },
     });
@@ -72,12 +81,15 @@ export async function getDashboard(req, res) {
 
 export async function listTugasWarga(req, res) {
     const surveyor = await getSurveyorRegion(req.user.id);
-    if (!surveyor?.kabupatenKota) {
+    if (!wilayahLengkap(surveyor)) {
         return error(res, "Wilayah tugas belum diset, hubungi Admin Provinsi", 400);
     }
 
     const { search, status } = req.query;
-    const where = { kabupatenKota: surveyor.kabupatenKota };
+    const where = {
+        kabupatenKota: surveyor.kabupatenKota,
+        kecamatan: surveyor.kecamatanTugas,
+    };
     if (status === "selesai") where.statusWawancara = "SUDAH_DIWAWANCARA";
     if (status === "belum") where.statusWawancara = "BELUM_DIWAWANCARA";
     if (search) {
@@ -124,7 +136,11 @@ export async function getTugasWargaDetail(req, res) {
     if (!warga) {
         return error(res, "Data warga tidak ditemukan", 404);
     }
-    if (!surveyor?.kabupatenKota || warga.kabupatenKota !== surveyor.kabupatenKota) {
+    if (
+        !wilayahLengkap(surveyor) ||
+        warga.kabupatenKota !== surveyor.kabupatenKota ||
+        warga.kecamatan !== surveyor.kecamatanTugas
+    ) {
         return error(res, "Warga ini di luar wilayah tugas Anda", 403);
     }
 
@@ -209,7 +225,11 @@ export async function submitWawancara(req, res) {
         fs.unlink(req.file.path, () => { });
         return error(res, "Data warga tidak ditemukan", 404);
     }
-    if (!surveyor?.kabupatenKota || warga.kabupatenKota !== surveyor.kabupatenKota) {
+    if (
+        !wilayahLengkap(surveyor) ||
+        warga.kabupatenKota !== surveyor.kabupatenKota ||
+        warga.kecamatan !== surveyor.kecamatanTugas
+    ) {
         fs.unlink(req.file.path, () => { });
         return error(res, "Warga ini di luar wilayah tugas Anda", 403);
     }
@@ -375,14 +395,18 @@ export async function getHasilWawancara(req, res) {
         getSurveyorRegion(req.user.id),
         prisma.warga.findUnique({
             where: { id },
-            select: { id: true, nik: true, nama: true, kabupatenKota: true, fotoDokumentasi: true },
+            select: { id: true, nik: true, nama: true, kabupatenKota: true, kecamatan: true, fotoDokumentasi: true },
         }),
     ]);
 
     if (!warga) {
         return error(res, "Data warga tidak ditemukan", 404);
     }
-    if (!surveyor?.kabupatenKota || warga.kabupatenKota !== surveyor.kabupatenKota) {
+    if (
+        !wilayahLengkap(surveyor) ||
+        warga.kabupatenKota !== surveyor.kabupatenKota ||
+        warga.kecamatan !== surveyor.kecamatanTugas
+    ) {
         return error(res, "Warga ini di luar wilayah tugas Anda", 403);
     }
 
@@ -393,8 +417,8 @@ export async function getHasilWawancara(req, res) {
             opsiDipilih: { include: { opsi: true } },
         },
         orderBy: [
-            { pertanyaan: { blok: { urutan: "asc" } } }, 
-            { pertanyaan: { urutan: "asc" } }            
+            { pertanyaan: { blok: { urutan: "asc" } } },
+            { pertanyaan: { urutan: "asc" } }
         ],
     });
 

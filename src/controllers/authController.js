@@ -28,6 +28,7 @@ export async function login(req, res) {
         nama: user.nama,
         role: user.role,
         kabupatenKota: user.kabupatenKota,
+        kecamatanTugas: user.kecamatanTugas,
         tokenVersion: user.tokenVersion,
     };
 
@@ -92,6 +93,7 @@ export async function updateProfile(req, res) {
         nama: updated.nama,
         role: updated.role,
         kabupatenKota: updated.kabupatenKota,
+        kecamatanTugas: updated.kecamatanTugas,
         tokenVersion: updated.tokenVersion,
     };
     const token = signToken(payload);
