@@ -685,9 +685,16 @@ export async function getSebaranWilayah(req, res) {
     });
 }
 
-async function getDataSurveiForExport(kabupatenKota) {
+async function getDataSurveiForExport(kabupatenKotaRaw) {
     const whereWarga = { statusWawancara: "SUDAH_DIWAWANCARA" };
-    if (kabupatenKota) whereWarga.kabupatenKota = kabupatenKota;
+
+    if (kabupatenKotaRaw) {
+        const kabupatenKota = resolveKabupatenKota(kabupatenKotaRaw);
+        if (!kabupatenKota) {
+            return { rows: [], semuaPertanyaan: [], kabupatenTidakDikenali: true };
+        }
+        whereWarga.kabupatenKota = kabupatenKota;
+    }
 
     const [wargaList, semuaPertanyaan] = await Promise.all([
         prisma.warga.findMany({
@@ -695,6 +702,7 @@ async function getDataSurveiForExport(kabupatenKota) {
             select: {
                 nik: true,
                 nama: true,
+                kabupatenKota: true,
                 jawabanWawancara: {
                     include: {
                         pertanyaan: true,
@@ -702,7 +710,7 @@ async function getDataSurveiForExport(kabupatenKota) {
                     },
                 },
             },
-            orderBy: { nama: "asc" },
+            orderBy: [{ kabupatenKota: "asc" }, { nama: "asc" }],
         }),
         prisma.pertanyaanWawancara.findMany({
             orderBy: [{ blok: { urutan: "asc" } }, { urutan: "asc" }],
@@ -717,71 +725,73 @@ async function getDataSurveiForExport(kabupatenKota) {
                 ? j.opsiDipilih.map((od) => od.opsi.label).join(", ")
                 : (j.nilaiTeks ?? "-");
         });
-        return { nik: w.nik, nama: w.nama, jawabanMap };
+        return {
+            nik: w.nik,
+            nama: w.nama,
+            kabupatenKota: mapKabupatenLabel(w.kabupatenKota) ?? w.kabupatenKota,
+            jawabanMap,
+        };
     });
 
-    return { rows, semuaPertanyaan };
+    return { rows, semuaPertanyaan, kabupatenTidakDikenali: false };
 }
 
 export async function exportExcel(req, res) {
     const { kabupatenKota } = req.query;
-    const { rows, semuaPertanyaan } = await getDataSurveiForExport(kabupatenKota);
+    const { rows, semuaPertanyaan, kabupatenTidakDikenali } = await getDataSurveiForExport(kabupatenKota);
 
+    if (kabupatenTidakDikenali) {
+        return error(res, `Kabupaten/Kota "${kabupatenKota}" tidak dikenali`, 400);
+    }
     if (rows.length === 0) {
         return error(res, "Belum ada data warga yang sudah disurvei untuk wilayah ini", 404);
     }
 
-    const headers = ["NIK", "Nama", ...semuaPertanyaan.map((p) => `${p.kode} - ${p.variabel}`)];
+    const headers = ["NIK", "Nama", "Kabupaten/Kota", ...semuaPertanyaan.map((p) => `${p.kode} - ${p.variabel}`)];
     const dataRows = rows.map((r) => [
         r.nik,
         r.nama,
+        r.kabupatenKota,
         ...semuaPertanyaan.map((p) => r.jawabanMap[p.kode] ?? "-"),
     ]);
 
     const worksheet = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
-    worksheet["!cols"] = headers.map((h, i) => ({ wch: i < 2 ? 22 : 28 }));
+    worksheet["!cols"] = headers.map((h, i) => ({ wch: i < 3 ? 22 : 28 }));
 
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Data Survei");
 
     const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
 
+    const namaFile = kabupatenKota
+        ? `data-survei-${kabupatenKota}-${Date.now()}.xlsx`
+        : `data-survei-semua-kabupaten-${Date.now()}.xlsx`;
+
     res.setHeader(
         "Content-Type",
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     );
-    res.setHeader("Content-Disposition", `attachment; filename="data-survei-${Date.now()}.xlsx"`);
+    res.setHeader("Content-Disposition", `attachment; filename="${namaFile}"`);
     return res.send(buffer);
-}
-
-function hitungLebarKolom(jumlahKolomSoal, totalWidth) {
-    const lebarNik = 85;
-    const lebarNama = 110;
-    const sisaWidth = totalWidth - lebarNik - lebarNama;
-    const lebarPerSoal = jumlahKolomSoal > 0 ? sisaWidth / jumlahKolomSoal : 0;
-    return [lebarNik, lebarNama, ...Array(jumlahKolomSoal).fill(lebarPerSoal)];
-}
-
-function potongTeks(doc, text, maxWidth) {
-    const str = String(text ?? "");
-    if (doc.widthOfString(str) <= maxWidth) return str;
-    let hasil = str;
-    while (hasil.length > 1 && doc.widthOfString(hasil + "...") > maxWidth) {
-        hasil = hasil.slice(0, -1);
-    }
-    return hasil + "...";
 }
 
 export async function exportPdf(req, res) {
     const { kabupatenKota } = req.query;
-    const { rows, semuaPertanyaan } = await getDataSurveiForExport(kabupatenKota);
+    const { rows, semuaPertanyaan, kabupatenTidakDikenali } = await getDataSurveiForExport(kabupatenKota);
 
+    if (kabupatenTidakDikenali) {
+        return error(res, `Kabupaten/Kota "${kabupatenKota}" tidak dikenali`, 400);
+    }
     if (rows.length === 0) {
         return error(res, "Belum ada data warga yang sudah disurvei untuk wilayah ini", 404);
     }
 
+    const namaFile = kabupatenKota
+        ? `data-survei-${kabupatenKota}-${Date.now()}.pdf`
+        : `data-survei-semua-kabupaten-${Date.now()}.pdf`;
+
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="data-survei-${Date.now()}.pdf"`);
+    res.setHeader("Content-Disposition", `attachment; filename="${namaFile}"`);
 
     const doc = new PDFDocument({ margin: 30, size: "A4", layout: "landscape" });
     doc.pipe(res);
@@ -791,12 +801,16 @@ export async function exportPdf(req, res) {
     const usableWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
     const batasBawah = doc.page.height - doc.page.margins.bottom;
     const tinggiBaris = 16;
-    const paddingKolom = 4; // sisa ruang antar kolom biar teks gak nempel
+    const paddingKolom = 4;
 
-    const headers = ["NIK", "Nama", ...semuaPertanyaan.map((p) => p.kode)];
+    const headers = ["NIK", "Nama", "Kab/Kota", ...semuaPertanyaan.map((p) => p.kode)];
     const lebarKolom = hitungLebarKolom(semuaPertanyaan.length, usableWidth);
 
-    doc.fontSize(14).font("Helvetica-Bold").text("Data Warga yang Sudah Disurvei", { align: "left" });
+    const judul = kabupatenKota
+        ? `Data Warga yang Sudah Disurvei - ${kabupatenKota}`
+        : "Data Warga yang Sudah Disurvei - Semua Kabupaten/Kota";
+
+    doc.fontSize(14).font("Helvetica-Bold").text(judul, { align: "left" });
     doc.fontSize(8).font("Helvetica");
     semuaPertanyaan.forEach((p) => {
         doc.text(`${p.kode} = ${p.variabel}`);
@@ -831,7 +845,7 @@ export async function exportPdf(req, res) {
         }
 
         let x = marginLeft;
-        const nilaiBaris = [r.nik, r.nama, ...semuaPertanyaan.map((p) => r.jawabanMap[p.kode] ?? "-")];
+        const nilaiBaris = [r.nik, r.nama, r.kabupatenKota, ...semuaPertanyaan.map((p) => r.jawabanMap[p.kode] ?? "-")];
         nilaiBaris.forEach((v, i) => {
             const teks = potongTeks(doc, v, lebarKolom[i] - paddingKolom);
             doc.text(teks, x, y, { lineBreak: false });
