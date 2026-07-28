@@ -361,7 +361,10 @@ export async function getHasilWawancara(req, res) {
             nik: true,
             nama: true,
             kabupatenKota: true,
-            fotoDokumentasi: true
+            fotoDokumentasi: true,
+            fotoRumah: true,
+            tandaTanganResponden: true,
+            tandaTanganEnumerator: true,
         },
     });
 
@@ -392,8 +395,11 @@ export async function getHasilWawancara(req, res) {
     return success(res, {
         nik: warga.nik,
         nama: warga.nama,
-        kabupatenKota: mapKabupatenLabel(warga.kabupatenKota), // Tambahan info wilayah untuk admin provinsi
+        kabupatenKota: mapKabupatenLabel(warga.kabupatenKota),
         foto: warga.fotoDokumentasi ? `/uploads/${warga.fotoDokumentasi}` : null,
+        fotoRumah: warga.fotoRumah ? `/uploads/${warga.fotoRumah}` : null,
+        tandaTanganResponden: warga.tandaTanganResponden ? `/uploads/${warga.tandaTanganResponden}` : null,
+        tandaTanganEnumerator: warga.tandaTanganEnumerator ? `/uploads/${warga.tandaTanganEnumerator}` : null,
         ringkasanJawaban,
     });
 }

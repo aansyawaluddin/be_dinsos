@@ -140,7 +140,16 @@ export async function getHasilWawancara(req, res) {
 
     const warga = await prisma.warga.findUnique({
         where: { id },
-        select: { id: true, nik: true, nama: true, kabupatenKota: true, fotoDokumentasi: true },
+        select: {
+            id: true,
+            nik: true,
+            nama: true,
+            kabupatenKota: true,
+            fotoDokumentasi: true,
+            fotoRumah: true,
+            tandaTanganResponden: true,
+            tandaTanganEnumerator: true,
+        },
     });
 
     if (!warga) {
@@ -174,6 +183,9 @@ export async function getHasilWawancara(req, res) {
         nik: warga.nik,
         nama: warga.nama,
         foto: warga.fotoDokumentasi ? `/uploads/${warga.fotoDokumentasi}` : null,
+        fotoRumah: warga.fotoRumah ? `/uploads/${warga.fotoRumah}` : null,
+        tandaTanganResponden: warga.tandaTanganResponden ? `/uploads/${warga.tandaTanganResponden}` : null,
+        tandaTanganEnumerator: warga.tandaTanganEnumerator ? `/uploads/${warga.tandaTanganEnumerator}` : null,
         ringkasanJawaban,
     });
 }
@@ -337,10 +349,6 @@ export async function getSebaranWilayah(req, res) {
     });
 }
 
-// ============================================================
-// UPLOAD & IMPORT EXCEL (dikunci ke wilayah admin ini saja)
-// ============================================================
-
 function readAndMapRows(filePath, kabupatenKotaAdmin) {
     const workbook = XLSX.readFile(filePath, { cellDates: true });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -374,7 +382,7 @@ function readAndMapRows(filePath, kabupatenKotaAdmin) {
             kabupatenLabel,
             fieldErrors,
             dbData: {
-                kabupatenKota: kabupatenKotaAdmin, // dipaksa sesuai wilayah admin yang login, bukan dari isi file
+                kabupatenKota: kabupatenKotaAdmin,
                 kecamatan,
                 desaKelurahan,
                 alamat: clean(row["alamat"]),
@@ -578,10 +586,6 @@ export async function cancelUpload(req, res) {
 
     return success(res, null, "Upload dibatalkan");
 }
-
-// ============================================================
-// EXPORT EXCEL & PDF (dikunci ke wilayah admin ini saja)
-// ============================================================
 
 async function getDataSurveiForExport(kabupatenKota) {
     const whereWarga = { statusWawancara: "SUDAH_DIWAWANCARA", kabupatenKota };
