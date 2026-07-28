@@ -35,7 +35,12 @@ function formatTanggalIndonesia(date) {
 async function getSurveyorRegion(userId) {
     return prisma.user.findUnique({
         where: { id: userId },
-        select: { nama: true, kecamatanTugas: true, kabupatenKota: true },
+        select: {
+            nama: true,
+            kecamatanTugas: true,
+            kabupatenKota: true,
+            fotoProfil: true
+        },
     });
 }
 
@@ -86,11 +91,14 @@ export async function uploadFotoProfile(req, res) {
 export async function getDashboard(req, res) {
     const surveyor = await getSurveyorRegion(req.user.id);
 
+    const fotoProfilUrl = surveyor?.fotoProfil ? `/uploads/${surveyor.fotoProfil}` : null;
+
     if (!wilayahLengkap(surveyor)) {
         return success(
             res,
             {
                 nama: surveyor?.nama ?? null,
+                fotoProfil: fotoProfilUrl, 
                 kabupatenKota: surveyor?.kabupatenKota ?? null,
                 kecamatanTugas: null,
                 tanggal: formatTanggalIndonesia(new Date()),
@@ -104,6 +112,7 @@ export async function getDashboard(req, res) {
         kabupatenKota: surveyor.kabupatenKota,
         kecamatan: surveyor.kecamatanTugas,
     };
+
     const [total, selesai] = await Promise.all([
         prisma.warga.count({ where }),
         prisma.warga.count({ where: { ...where, statusWawancara: "SUDAH_DIWAWANCARA" } }),
@@ -114,6 +123,7 @@ export async function getDashboard(req, res) {
 
     return success(res, {
         nama: surveyor.nama,
+        fotoProfil: fotoProfilUrl,
         kabupatenKota: surveyor.kabupatenKota,
         kecamatanTugas: surveyor.kecamatanTugas,
         tanggal: formatTanggalIndonesia(new Date()),

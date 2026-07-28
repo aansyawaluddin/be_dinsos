@@ -256,6 +256,7 @@ export async function listSurveyor(req, res) {
             kabupatenKota: true,
             nomorHp: true,
             aktif: true,
+            fotoProfil: true,
         },
         orderBy: { nama: "asc" },
     });
@@ -275,6 +276,7 @@ export async function listSurveyor(req, res) {
         nama: s.nama,
         username: s.username,
         inisial: getInitials(s.nama),
+        fotoProfil: s.fotoProfil ? `/uploads/${s.fotoProfil}` : null, 
         kecamatanTugas: s.kecamatanTugas,
         kabupatenKota: s.kabupatenKota,
         nomorHp: s.nomorHp,
