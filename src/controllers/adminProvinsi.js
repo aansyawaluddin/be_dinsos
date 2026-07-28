@@ -681,7 +681,7 @@ export async function getSebaranWilayah(req, res) {
     return success(res, {
         ringkasan: {
             totalResponden,
-            totalKabupatenKota: 13,
+            totalKabupatenKota: 4,
             sudahTersinkron,
             persentaseSinkron,
             menungguSync,
