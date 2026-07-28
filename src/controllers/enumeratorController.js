@@ -47,6 +47,42 @@ function unlinkSafe(filePath) {
     if (filePath) fs.unlink(filePath, () => { });
 }
 
+export async function uploadFotoProfile(req, res) {
+    const userId = req.user.id;
+    const fotoFile = req.file;
+
+    if (!fotoFile) {
+        return error(res, "Foto profil wajib diupload", 400);
+    }
+
+    try {
+        const userLama = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { fotoProfil: true }
+        });
+
+        const fotoPathBaru = path.relative(UPLOAD_ROOT, fotoFile.path);
+
+        const updated = await prisma.user.update({
+            where: { id: userId },
+            data: { fotoProfil: fotoPathBaru },
+        });
+
+        if (userLama?.fotoProfil && userLama.fotoProfil !== fotoPathBaru) {
+            unlinkSafe(path.join(UPLOAD_ROOT, userLama.fotoProfil));
+        }
+
+        return success(
+            res,
+            { fotoProfil: updated.fotoProfil },
+            "Foto profil berhasil diperbarui"
+        );
+    } catch (err) {
+        unlinkSafe(fotoFile.path);
+        return error(res, "Gagal memperbarui foto profil", 500);
+    }
+}
+
 export async function getDashboard(req, res) {
     const surveyor = await getSurveyorRegion(req.user.id);
 

@@ -57,6 +57,7 @@ model User {
   role          Role
   kabupatenKota KabupatenKota?
   aktif         Boolean        @default(true)
+  fotoProfil    String?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 
