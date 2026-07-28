@@ -12,10 +12,11 @@ const app = express();
 
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
-const allowedOrigins = (process.env.CORS_ORIGINS || "http://localhost:3000")
-    .split(",")
-    .map((origin) => origin.trim())
-    .filter(Boolean);
+const allowedOrigins = [
+    "http://localhost:3000",
+    "https://beranibersinar.com",
+    "https://www.beranibersinar.com"
+];
 
 app.use(
     cors({
