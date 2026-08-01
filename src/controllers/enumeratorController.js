@@ -145,25 +145,25 @@ export async function createWargaBaru(req, res) {
     }
 
     const {
-        desaKelurahan,           
-        alamat,                
-        rw,                  
-        rt,                      
-        desilTerbaru,           
-        nomorKK,                
-        nik,                     
-        nama,                    
-        jenisKelamin,          
-        tanggalLahir,            
-        tempatLahir,             
-        statusPerkawinan,        
-        hubunganKeluarga,        
-        keberadaanAnggotaKeluarga, 
-        disabilitas,             
-        keteranganDisabilitas,   
-        pbiJk,                 
-        bansosPkh,             
-        bansosSembako            
+        desaKelurahan,
+        alamat,
+        rw,
+        rt,
+        desilTerbaru,
+        nomorKK,
+        nik,
+        nama,
+        jenisKelamin,
+        tanggalLahir,
+        tempatLahir,
+        statusPerkawinan,
+        hubunganKeluarga,
+        keberadaanAnggotaKeluarga,
+        disabilitas,
+        keteranganDisabilitas,
+        pbiJk,
+        bansosPkh,
+        bansosSembako
     } = req.body;
 
     if (!nik || !nomorKK || !nama || !desaKelurahan) {
@@ -315,6 +315,19 @@ export async function getTugasWargaDetail(req, res) {
 }
 
 export async function getInstrumen(req, res) {
+    const { wargaId } = req.query;
+    let warga = null;
+
+    if (wargaId) {
+        warga = await prisma.warga.findUnique({
+            where: { id: Number(wargaId) }
+        });
+
+        if (!warga) {
+            return error(res, "Data warga tidak ditemukan untuk pre-fill kuesioner", 404);
+        }
+    }
+
     const bloks = await prisma.blokWawancara.findMany({
         orderBy: { urutan: "asc" },
         include: {
@@ -330,20 +343,46 @@ export async function getInstrumen(req, res) {
     const data = bloks.map((blok) => ({
         kode: blok.kode,
         judul: blok.judul,
-        pertanyaan: blok.pertanyaan.map((p) => ({
-            id: p.id,
-            kode: p.kode,
-            variabel: p.variabel,
-            jenis: p.jenis,
-            wajib: p.wajib,
-            aturan: p.aturan,
-            opsi: p.opsi.map((o) => ({ kode: o.kode, label: o.label })),
-        })),
+        pertanyaan: blok.pertanyaan.map((p) => {
+            let defaultValue = null;
+
+            if (warga) {
+                switch (p.kode) {
+                    case "A1": // Nama Kepala Keluarga / Responden
+                        defaultValue = warga.nama;
+                        break;
+                    case "A2": // NIK
+                        defaultValue = warga.nik;
+                        break;
+                    case "A3": // No KK
+                        defaultValue = warga.nomorKK;
+                        break;
+                    case "A4": // Alamat Lengkap
+                        let alamatLengkap = warga.alamat ? `${warga.alamat}, ` : "";
+                        if (warga.rt || warga.rw) {
+                            alamatLengkap += `RT ${warga.rt || '-'}/RW ${warga.rw || '-'}, `;
+                        }
+                        alamatLengkap += `Ds/Kel. ${warga.desaKelurahan}, Kec. ${warga.kecamatan}`;
+                        defaultValue = alamatLengkap;
+                        break;
+                }
+            }
+
+            return {
+                id: p.id,
+                kode: p.kode,
+                variabel: p.variabel,
+                jenis: p.jenis,
+                wajib: p.wajib,
+                aturan: p.aturan,
+                defaultValue: defaultValue,
+                opsi: p.opsi.map((o) => ({ kode: o.kode, label: o.label })),
+            };
+        }),
     }));
 
     return success(res, { blok: data });
 }
-
 export async function submitWawancara(req, res) {
     const surveyorId = req.user.id;
     const id = Number(req.params.id);
