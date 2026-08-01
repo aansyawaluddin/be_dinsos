@@ -2,6 +2,7 @@ import XLSX from "xlsx";
 import PDFDocument from "pdfkit";
 import path from "path";
 import fs from "fs";
+import { hashPassword } from "../utils/hash.js";
 import prisma from "../lib/prisma.js";
 import { success, error } from "../utils/response.js";
 import {
@@ -232,6 +233,70 @@ export async function getCharts(req, res) {
     });
 }
 
+const DEFAULT_SURVEYOR_PASSWORD = "12345";
+const USERNAME_REGEX = /^[a-zA-Z0-9._]+$/;
+
+export async function createSurveyor(req, res) {
+    const kabupatenKota = requireRegion(req, res);
+    if (!kabupatenKota) return;
+
+    const nama = clean(req.body.nama);
+    const usernameRaw = clean(req.body.username);
+    const kecamatanTugas = clean(req.body.kecamatanTugas);
+    const nomorHp = clean(req.body.nomorHp);
+
+    // 2. Validasi Input
+    if (!nama) {
+        return error(res, "Nama lengkap wajib diisi", 400);
+    }
+    if (!usernameRaw) {
+        return error(res, "Username login wajib diisi", 400);
+    }
+    if (!kecamatanTugas) {
+        return error(res, "Kecamatan tugas wajib diisi", 400);
+    }
+
+    const username = usernameRaw.toLowerCase();
+    if (!USERNAME_REGEX.test(username)) {
+        return error(res, "Username hanya boleh huruf, angka, titik, dan underscore (tanpa spasi)", 400);
+    }
+
+    const existingUser = await prisma.user.findUnique({ where: { username } });
+    if (existingUser) {
+        return error(res, "Username sudah digunakan, silakan pilih yang lain", 400);
+    }
+
+    const hashedPassword = await hashPassword(DEFAULT_SURVEYOR_PASSWORD);
+
+    // 5. Simpan ke database
+    const surveyor = await prisma.user.create({
+        data: {
+            nama,
+            username,
+            kecamatanTugas,
+            kabupatenKota,
+            nomorHp,
+            password: hashedPassword,
+            role: "ENUMERATOR",
+        },
+    });
+
+    return success(
+        res,
+        {
+            id: surveyor.id,
+            nama: surveyor.nama,
+            username: surveyor.username,
+            kecamatanTugas: surveyor.kecamatanTugas,
+            kabupatenKota: surveyor.kabupatenKota,
+            nomorHp: surveyor.nomorHp,
+            aktif: surveyor.aktif,
+        },
+        `Surveyor berhasil didaftarkan (password default: ${DEFAULT_SURVEYOR_PASSWORD})`,
+        201
+    );
+}
+
 export async function listSurveyor(req, res) {
     const kabupatenKota = requireRegion(req, res);
     if (!kabupatenKota) return;
@@ -276,7 +341,7 @@ export async function listSurveyor(req, res) {
         nama: s.nama,
         username: s.username,
         inisial: getInitials(s.nama),
-        fotoProfil: s.fotoProfil ? `/uploads/${s.fotoProfil}` : null, 
+        fotoProfil: s.fotoProfil ? `/uploads/${s.fotoProfil}` : null,
         kecamatanTugas: s.kecamatanTugas,
         kabupatenKota: s.kabupatenKota,
         nomorHp: s.nomorHp,

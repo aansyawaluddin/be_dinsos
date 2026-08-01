@@ -14,6 +14,8 @@ router.get("/warga/:id/hasil", authenticate, authorize("ADMIN_KABKOTA"), asyncHa
 
 router.get("/chart", authenticate, authorize("ADMIN_KABKOTA"), asyncHandler(ctrl.getCharts));
 
+router.post("/surveyor", authenticate, authorize("ADMIN_KABKOTA"), asyncHandler(ctrl.createSurveyor));
+
 router.get("/surveyor", authenticate, authorize("ADMIN_KABKOTA"), asyncHandler(ctrl.listSurveyor));
 
 router.get(
