@@ -308,6 +308,7 @@ export async function getTugasWargaDetail(req, res) {
         alamat: warga.alamat,
         rtRw: formatRtRw(warga.rt, warga.rw),
         usia: hitungUsia(warga.tanggalLahir),
+        posisiDalamKeluarga: warga.hubunganKeluarga,
         statusWawancara: warga.statusWawancara,
         keteranganValidasi: warga.keteranganValidasi,
         statusLabel: STATUS_DETAIL_LABEL[warga.statusWawancara] ?? warga.statusWawancara,
