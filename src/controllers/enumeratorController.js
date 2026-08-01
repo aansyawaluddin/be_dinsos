@@ -135,6 +135,94 @@ export async function getDashboard(req, res) {
     });
 }
 
+export async function createWargaBaru(req, res) {
+    const surveyorId = req.user.id;
+
+    const surveyor = await getSurveyorRegion(surveyorId);
+
+    if (!wilayahLengkap(surveyor)) {
+        return error(res, "Wilayah tugas belum diset, hubungi Admin Provinsi", 403);
+    }
+
+    const {
+        desaKelurahan,           
+        alamat,                
+        rw,                  
+        rt,                      
+        desilTerbaru,           
+        nomorKK,                
+        nik,                     
+        nama,                    
+        jenisKelamin,          
+        tanggalLahir,            
+        tempatLahir,             
+        statusPerkawinan,        
+        hubunganKeluarga,        
+        keberadaanAnggotaKeluarga, 
+        disabilitas,             
+        keteranganDisabilitas,   
+        pbiJk,                 
+        bansosPkh,             
+        bansosSembako            
+    } = req.body;
+
+    if (!nik || !nomorKK || !nama || !desaKelurahan) {
+        return error(res, "NIK, Nomor KK, Nama, dan Desa/Kelurahan wajib diisi", 400);
+    }
+    const existingWarga = await prisma.warga.findUnique({
+        where: { nik }
+    });
+
+    if (existingWarga) {
+        return error(res, "Data warga dengan NIK tersebut sudah terdaftar di sistem", 400);
+    }
+
+    try {
+        const wargaBaru = await prisma.warga.create({
+            data: {
+                nik,
+                nomorKK,
+                nama,
+                desaKelurahan,
+                alamat: alamat || null,
+                rt: rt ? String(rt) : null,
+                rw: rw ? String(rw) : null,
+                desilTerbaru: desilTerbaru || null,
+                jenisKelamin: jenisKelamin || null,
+                tanggalLahir: tanggalLahir ? new Date(tanggalLahir) : null,
+                tempatLahir: tempatLahir || null,
+                statusPerkawinan: statusPerkawinan || null,
+                hubunganKeluarga: hubunganKeluarga || null,
+                keberadaanAnggotaKeluarga: keberadaanAnggotaKeluarga || null,
+                disabilitas: disabilitas || null,
+                keteranganDisabilitas: keteranganDisabilitas || null,
+                pbiJk: pbiJk || null,
+                bansosPkh: bansosPkh || null,
+                bansosSembako: bansosSembako || null,
+                kabupatenKota: surveyor.kabupatenKota,
+                kecamatan: surveyor.kecamatanTugas,
+
+                createdById: surveyorId,
+                statusWawancara: "BELUM_DIWAWANCARA"
+            }
+        });
+
+        return success(
+            res,
+            {
+                id: wargaBaru.id,
+                nik: wargaBaru.nik,
+                nama: wargaBaru.nama,
+                desaKelurahan: wargaBaru.desaKelurahan
+            },
+            "Data warga baru berhasil ditambahkan ke daftar survei"
+        );
+    } catch (err) {
+        console.error("Error createWargaBaru:", err);
+        return error(res, "Terjadi kesalahan sistem saat menyimpan data", 500);
+    }
+}
+
 export async function listTugasWarga(req, res) {
     const surveyor = await getSurveyorRegion(req.user.id);
     if (!wilayahLengkap(surveyor)) {
