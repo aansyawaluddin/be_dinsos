@@ -252,8 +252,10 @@ export async function cancelUpload(req, res) {
 }
 
 const STATUS_WAWANCARA_LABEL = {
-    SUDAH_DIWAWANCARA: "Sudah Disurvei",
     BELUM_DIWAWANCARA: "Belum Disurvei",
+    SUDAH_DIWAWANCARA: "Menunggu Validasi",
+    DISETUJUI: "Valid (Disetujui)",
+    DITOLAK: "Tidak Valid (Ditolak)",
 };
 
 export async function listWarga(req, res) {

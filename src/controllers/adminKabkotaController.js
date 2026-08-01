@@ -26,8 +26,10 @@ import {
 const UPLOAD_DIR = path.join(process.cwd(), "uploads");
 
 const STATUS_WAWANCARA_LABEL = {
-    SUDAH_DIWAWANCARA: "Sudah Disurvei",
     BELUM_DIWAWANCARA: "Belum Disurvei",
+    SUDAH_DIWAWANCARA: "Menunggu Validasi",
+    DISETUJUI: "Valid (Disetujui)",
+    DITOLAK: "Tidak Valid (Ditolak)",
 };
 
 function requireRegion(req, res) {
@@ -189,6 +191,61 @@ export async function getHasilWawancara(req, res) {
         tandaTanganEnumerator: warga.tandaTanganEnumerator ? `/uploads/${warga.tandaTanganEnumerator}` : null,
         ringkasanJawaban,
     });
+}
+
+export async function validasiWawancara(req, res) {
+    const kabupatenKota = requireRegion(req, res);
+    if (!kabupatenKota) return;
+
+    const id = Number(req.params.id);
+    const { statusValidasi, keterangan } = req.body;
+
+    if (!Number.isInteger(id) || id <= 0) {
+        return error(res, "ID warga tidak valid", 400);
+    }
+
+    if (!["DISETUJUI", "DITOLAK"].includes(statusValidasi)) {
+        return error(res, "Status validasi harus DISETUJUI atau DITOLAK", 400);
+    }
+
+    if (statusValidasi === "DITOLAK" && (!keterangan || keterangan.trim() === "")) {
+        return error(res, "Keterangan/alasan penolakan wajib diisi", 400);
+    }
+
+    const warga = await prisma.warga.findUnique({ where: { id } });
+
+    if (!warga) {
+        return error(res, "Data warga tidak ditemukan", 404);
+    }
+
+    if (warga.kabupatenKota !== kabupatenKota) {
+        return error(res, "Warga ini di luar wilayah tugas Anda", 403);
+    }
+
+    if (warga.statusWawancara === "BELUM_DIWAWANCARA") {
+        return error(res, "Warga belum disurvei, tidak dapat divalidasi", 400);
+    }
+
+    const cleanKeterangan = keterangan ? clean(keterangan) : null;
+
+    const updated = await prisma.warga.update({
+        where: { id },
+        data: {
+            statusWawancara: statusValidasi,
+            keteranganValidasi: statusValidasi === "DITOLAK" ? cleanKeterangan : null,
+        },
+    });
+
+    return success(
+        res,
+        {
+            id: updated.id,
+            statusWawancara: updated.statusWawancara,
+            statusLabel: STATUS_WAWANCARA_LABEL[updated.statusWawancara],
+            keteranganValidasi: updated.keteranganValidasi,
+        },
+        `Wawancara berhasil ${statusValidasi === "DISETUJUI" ? "disetujui" : "ditolak"}`
+    );
 }
 
 export async function getCharts(req, res) {

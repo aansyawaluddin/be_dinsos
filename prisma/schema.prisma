@@ -37,6 +37,8 @@ enum JenisKelamin {
 enum StatusWawancara {
   BELUM_DIWAWANCARA
   SUDAH_DIWAWANCARA
+  DISETUJUI    
+  DITOLAK 
 }
 
 enum JenisPertanyaan {
@@ -94,6 +96,7 @@ model Warga {
   bansosSembako             String?
 
   statusWawancara   StatusWawancara @default(BELUM_DIWAWANCARA)
+  keteranganValidasi    String?
   tanggalWawancara  DateTime?
   diwawancaraOlehId Int?
   klasifikasi       String? 

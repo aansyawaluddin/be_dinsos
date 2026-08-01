@@ -11,13 +11,17 @@ import {
 } from "../utils/wargaMapper.js";
 
 const STATUS_LABEL = {
-    SUDAH_DIWAWANCARA: "Selesai",
     BELUM_DIWAWANCARA: "Survei",
+    SUDAH_DIWAWANCARA: "Menunggu Validasi",
+    DISETUJUI: "Disetujui",
+    DITOLAK: "Ditolak",
 };
 
 const STATUS_DETAIL_LABEL = {
-    SUDAH_DIWAWANCARA: "Sudah Disurvei",
     BELUM_DIWAWANCARA: "Belum Disurvei",
+    SUDAH_DIWAWANCARA: "Menunggu Validasi Admin",
+    DISETUJUI: "Valid (Disetujui)",
+    DITOLAK: "Tidak Valid (Ditolak)",
 };
 
 const BULAN_INDONESIA = [
@@ -98,7 +102,7 @@ export async function getDashboard(req, res) {
             res,
             {
                 nama: surveyor?.nama ?? null,
-                fotoProfil: fotoProfilUrl, 
+                fotoProfil: fotoProfilUrl,
                 kabupatenKota: surveyor?.kabupatenKota ?? null,
                 kecamatanTugas: null,
                 tanggal: formatTanggalIndonesia(new Date()),
@@ -142,8 +146,16 @@ export async function listTugasWarga(req, res) {
         kabupatenKota: surveyor.kabupatenKota,
         kecamatan: surveyor.kecamatanTugas,
     };
-    if (status === "selesai") where.statusWawancara = "SUDAH_DIWAWANCARA";
-    if (status === "belum") where.statusWawancara = "BELUM_DIWAWANCARA";
+
+    if (status === "selesai") {
+        where.statusWawancara = {
+            in: ["SUDAH_DIWAWANCARA", "DISETUJUI", "DITOLAK"]
+        };
+    }
+    if (status === "belum") {
+        where.statusWawancara = "BELUM_DIWAWANCARA";
+    }
+
     if (search) {
         where.OR = [
             { nama: { contains: search } },
@@ -158,8 +170,9 @@ export async function listTugasWarga(req, res) {
             nik: true,
             nama: true,
             statusWawancara: true,
+            keteranganValidasi: true,
         },
-        orderBy: { nama: "asc" },
+        orderBy: { id: "asc" },
     });
 
     const items = rows.map((w) => ({
@@ -169,6 +182,7 @@ export async function listTugasWarga(req, res) {
         inisial: getInitials(w.nama),
         statusWawancara: w.statusWawancara,
         statusLabel: STATUS_LABEL[w.statusWawancara] ?? w.statusWawancara,
+        keteranganValidasi: w.keteranganValidasi,
     }));
 
     return success(res, { items, total: items.length });
@@ -207,6 +221,7 @@ export async function getTugasWargaDetail(req, res) {
         rtRw: formatRtRw(warga.rt, warga.rw),
         usia: hitungUsia(warga.tanggalLahir),
         statusWawancara: warga.statusWawancara,
+        keteranganValidasi: warga.keteranganValidasi,
         statusLabel: STATUS_DETAIL_LABEL[warga.statusWawancara] ?? warga.statusWawancara,
     });
 }
