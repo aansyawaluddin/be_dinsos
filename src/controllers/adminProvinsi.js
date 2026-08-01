@@ -829,7 +829,7 @@ export async function getSebaranWilayah(req, res) {
 }
 
 async function getDataSurveiForExport(kabupatenKotaRaw) {
-    const whereWarga = { statusWawancara: "SUDAH_DIWAWANCARA" };
+    const whereWarga = { statusWawancara: "DISETUJUI" };
 
     if (kabupatenKotaRaw) {
         const kabupatenKota = resolveKabupatenKota(kabupatenKotaRaw);

@@ -712,7 +712,7 @@ export async function cancelUpload(req, res) {
 }
 
 async function getDataSurveiForExport(kabupatenKota) {
-    const whereWarga = { statusWawancara: "SUDAH_DIWAWANCARA", kabupatenKota };
+    const whereWarga = { statusWawancara: "DISETUJUI", kabupatenKota };
 
     const [wargaList, semuaPertanyaan] = await Promise.all([
         prisma.warga.findMany({
