@@ -455,6 +455,139 @@ export async function getCharts(req, res) {
     });
 }
 
+const DEFAULT_ADMIN_PASSWORD = "12345";
+
+export async function createAdminKabKota(req, res) {
+    const nama = clean(req.body.nama);
+    const usernameRaw = clean(req.body.username);
+    const kabupatenKotaRaw = clean(req.body.kabupatenKota);
+    const nomorHp = clean(req.body.nomorHp);
+
+    if (!nama) {
+        return error(res, "Nama lengkap wajib diisi", 400);
+    }
+    if (!usernameRaw) {
+        return error(res, "Username login wajib diisi", 400);
+    }
+    if (!kabupatenKotaRaw) {
+        return error(res, "Kabupaten/Kota wajib diisi", 400);
+    }
+
+    const username = usernameRaw.toLowerCase();
+    if (!USERNAME_REGEX.test(username)) {
+        return error(res, "Username hanya boleh huruf, angka, titik, dan underscore (tanpa spasi)", 400);
+    }
+
+    const kabupatenKota = resolveKabupatenKota(kabupatenKotaRaw);
+    if (!kabupatenKota) {
+        return error(res, `Kabupaten/Kota "${kabupatenKotaRaw}" tidak dikenali`, 400);
+    }
+
+    const existingUser = await prisma.user.findUnique({ where: { username } });
+    if (existingUser) {
+        return error(res, "Username sudah digunakan, silakan pilih yang lain", 400);
+    }
+
+    const hashedPassword = await hashPassword(DEFAULT_ADMIN_PASSWORD);
+
+    const admin = await prisma.user.create({
+        data: {
+            nama,
+            username,
+            kabupatenKota, // Wajib untuk admin kab/kota
+            nomorHp,
+            password: hashedPassword,
+            role: "ADMIN_KABKOTA",
+        },
+    });
+
+    return success(
+        res,
+        {
+            id: admin.id,
+            nama: admin.nama,
+            username: admin.username,
+            kabupatenKota: mapKabupatenLabel(admin.kabupatenKota),
+            nomorHp: admin.nomorHp,
+            aktif: admin.aktif,
+        },
+        `Admin Kab/Kota berhasil didaftarkan (password default: ${DEFAULT_ADMIN_PASSWORD})`,
+        201
+    );
+}
+
+export async function listAdminKabKota(req, res) {
+    const { search } = req.query;
+
+    const where = { role: "ADMIN_KABKOTA" };
+    if (search) {
+        where.OR = [
+            { nama: { contains: search } },
+            { username: { contains: search } },
+        ];
+    }
+
+    const admins = await prisma.user.findMany({
+        where,
+        select: {
+            id: true,
+            nama: true,
+            username: true,
+            kabupatenKota: true,
+            nomorHp: true,
+            aktif: true,
+            fotoProfil: true,
+        },
+        orderBy: { nama: "asc" },
+    });
+
+    const items = admins.map((a) => ({
+        id: a.id,
+        nama: a.nama,
+        username: a.username,
+        inisial: getInitials(a.nama),
+        fotoProfil: a.fotoProfil ? `/uploads/${a.fotoProfil}` : null,
+        kabupatenKota: a.kabupatenKota,
+        kabupatenKotaLabel: mapKabupatenLabel(a.kabupatenKota),
+        nomorHp: a.nomorHp,
+        aktif: a.aktif,
+        statusLabel: a.aktif ? "Aktif" : "Nonaktif",
+    }));
+
+    return success(res, {
+        items,
+        total: items.length,
+    });
+}
+
+export async function setAdminKabKotaStatus(req, res) {
+    const id = Number(req.params.id);
+    const { aktif } = req.body;
+
+    if (!Number.isInteger(id) || id <= 0) {
+        return error(res, "ID admin tidak valid", 400);
+    }
+    if (typeof aktif !== "boolean") {
+        return error(res, "Field aktif wajib diisi (true/false)", 400);
+    }
+
+    const admin = await prisma.user.findUnique({ where: { id } });
+    if (!admin || admin.role !== "ADMIN_KABKOTA") {
+        return error(res, "Admin Kab/Kota tidak ditemukan", 404);
+    }
+
+    const updated = await prisma.user.update({
+        where: { id },
+        data: { aktif },
+    });
+
+    return success(
+        res,
+        { id: updated.id, aktif: updated.aktif, statusLabel: updated.aktif ? "Aktif" : "Nonaktif" },
+        updated.aktif ? "Admin Kab/Kota diaktifkan" : "Admin Kab/Kota dinonaktifkan"
+    );
+}
+
 const DEFAULT_SURVEYOR_PASSWORD = "12345";
 const USERNAME_REGEX = /^[a-zA-Z0-9._]+$/;
 
@@ -539,7 +672,7 @@ export async function listSurveyor(req, res) {
             kabupatenKota: true,
             nomorHp: true,
             aktif: true,
-            fotoProfil: true, 
+            fotoProfil: true,
         },
         orderBy: { nama: "asc" },
     });

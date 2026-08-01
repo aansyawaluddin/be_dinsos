@@ -51,6 +51,12 @@ router.post("/surveyor", authenticate, authorize("ADMIN_PROVINSI"), asyncHandler
 router.patch("/surveyor/:id/status", authenticate, authorize("ADMIN_PROVINSI"), asyncHandler(ctrl.setSurveyorStatus));
 router.delete("/surveyor/:id", authenticate, authorize("ADMIN_PROVINSI"), asyncHandler(ctrl.deleteSurveyor));
 
+// Data Admin Kab/Kota
+router.get("/admin-kabkota", authenticate, authorize("ADMIN_PROVINSI"), asyncHandler(ctrl.listAdminKabKota));
+router.post("/admin-kabkota", authenticate, authorize("ADMIN_PROVINSI"), asyncHandler(ctrl.createAdminKabKota));
+router.patch("/admin-kabkota/:id/status", authenticate, authorize("ADMIN_PROVINSI"), asyncHandler(ctrl.setAdminKabKotaStatus));
+
+
 router.get(
     "/sebaran-wilayah",
     authenticate,
