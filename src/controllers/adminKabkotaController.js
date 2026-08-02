@@ -68,6 +68,7 @@ export async function listWarga(req, res) {
                 tanggalLahir: true,
                 desilTerbaru: true,
                 statusWawancara: true,
+                kendalaSurvei: true,
             },
             skip: (Number(page) - 1) * Number(limit),
             take: Number(limit),
@@ -89,6 +90,7 @@ export async function listWarga(req, res) {
         desilAwal: formatDesilLabel(w.desilTerbaru),
         statusWawancara: w.statusWawancara,
         statusLabel: STATUS_WAWANCARA_LABEL[w.statusWawancara] ?? w.statusWawancara,
+        kendalaSurvei: w.kendalaSurvei,
     }));
 
     return success(res, {
