@@ -96,6 +96,7 @@ model Warga {
   bansosSembako             String?
 
   statusWawancara   StatusWawancara @default(BELUM_DIWAWANCARA)
+  kendalaSurvei     String?
   keteranganValidasi    String?
   tanggalWawancara  DateTime?
   diwawancaraOlehId Int?

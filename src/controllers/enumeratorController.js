@@ -258,6 +258,7 @@ export async function listTugasWarga(req, res) {
             nik: true,
             nama: true,
             statusWawancara: true,
+            kendalaSurvei: true,
             keteranganValidasi: true,
         },
         orderBy: { id: "asc" },
@@ -269,11 +270,59 @@ export async function listTugasWarga(req, res) {
         nama: w.nama,
         inisial: getInitials(w.nama),
         statusWawancara: w.statusWawancara,
+        kendalaSurvei: w.kendalaSurvei,
         statusLabel: STATUS_LABEL[w.statusWawancara] ?? w.statusWawancara,
         keteranganValidasi: w.keteranganValidasi,
     }));
 
     return success(res, { items, total: items.length });
+}
+
+export async function reportKendalaSurvei(req, res) {
+    const surveyorId = req.user.id;
+    const id = Number(req.params.id);
+    const { kendalaSurvei } = req.body;
+
+    if (!Number.isInteger(id) || id <= 0) {
+        return error(res, "ID warga tidak valid", 400);
+    }
+    if (!kendalaSurvei || kendalaSurvei.trim() === "") {
+        return error(res, "Keterangan kendala wajib diisi", 400);
+    }
+
+    const [surveyor, warga] = await Promise.all([
+        getSurveyorRegion(surveyorId),
+        prisma.warga.findUnique({ where: { id } }),
+    ]);
+
+    if (!warga) {
+        return error(res, "Data warga tidak ditemukan", 404);
+    }
+    if (
+        !wilayahLengkap(surveyor) ||
+        warga.kabupatenKota !== surveyor.kabupatenKota ||
+        warga.kecamatan !== surveyor.kecamatanTugas
+    ) {
+        return error(res, "Warga ini di luar wilayah tugas Anda", 403);
+    }
+
+    const updated = await prisma.warga.update({
+        where: { id },
+        data: {
+            kendalaSurvei: kendalaSurvei.trim(),
+        },
+    });
+
+    return success(
+        res,
+        {
+            id: updated.id,
+            nama: updated.nama,
+            statusWawancara: updated.statusWawancara,
+            kendalaSurvei: updated.kendalaSurvei,
+        },
+        "Kendala survei berhasil dilaporkan"
+    );
 }
 
 export async function getTugasWargaDetail(req, res) {
@@ -300,6 +349,7 @@ export async function getTugasWargaDetail(req, res) {
 
     return success(res, {
         id: warga.id,
+        kk: warga.nomorKK,
         nik: warga.nik,
         nama: warga.nama,
         inisial: getInitials(warga.nama),
@@ -309,6 +359,7 @@ export async function getTugasWargaDetail(req, res) {
         rtRw: formatRtRw(warga.rt, warga.rw),
         usia: hitungUsia(warga.tanggalLahir),
         posisiDalamKeluarga: warga.hubunganKeluarga,
+        kendalaSurvei: warga.kendalaSurvei,
         statusWawancara: warga.statusWawancara,
         keteranganValidasi: warga.keteranganValidasi,
         statusLabel: STATUS_DETAIL_LABEL[warga.statusWawancara] ?? warga.statusWawancara,
