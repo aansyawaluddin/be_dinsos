@@ -770,6 +770,13 @@ export async function getSebaranWilayah(req, res) {
     const whereGlobal = {};
     if (kabupatenKota) whereGlobal.kabupatenKota = kabupatenKota;
 
+    const uniqueKabKota = await prisma.warga.findMany({
+        where: whereGlobal,
+        distinct: ['kabupatenKota'],
+        select: { kabupatenKota: true },
+    });
+    const totalKabupatenKotaDinamis = uniqueKabKota.length;
+
     const [totalResponden, sudahTersinkron, enumeratorAktif] = await Promise.all([
         prisma.warga.count({ where: whereGlobal }),
         prisma.warga.count({ where: { ...whereGlobal, statusWawancara: "SUDAH_DIWAWANCARA" } }),
@@ -820,7 +827,7 @@ export async function getSebaranWilayah(req, res) {
     return success(res, {
         ringkasan: {
             totalResponden,
-            totalKabupatenKota: 4,
+            totalKabupatenKota: totalKabupatenKotaDinamis,
             sudahTersinkron,
             persentaseSinkron,
             menungguSync,
