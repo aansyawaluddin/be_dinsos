@@ -88,7 +88,7 @@ export const BLOK_D = {
             kode: "D6",
             variabel: "Dari seluruh strategi yang pernah dilakukan, mana yang paling sering digunakan?",
             jenis: "PILIHAN_TUNGGAL",
-            wajib: false,
+            wajib: true,
             aturan:
                 "Hanya relevan jika D5 diisi lebih dari 'Tidak melakukan strategi apapun'. Kode dinomori ulang 1-8 dari dokumen asli (yang mulai dari 5).",
             opsi: [

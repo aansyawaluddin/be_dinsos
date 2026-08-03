@@ -23,7 +23,7 @@ export const BLOK_B = {
             kode: "B2",
             variabel: "Pendidikan terakhir pasangan Kepala Keluarga (jika ada)",
             jenis: "PILIHAN_TUNGGAL",
-            wajib: true,
+            wajib: false,
             aturan: null,
             opsi: [
                 { kode: "1", label: "Tidak pernah sekolah" },

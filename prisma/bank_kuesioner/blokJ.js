@@ -7,8 +7,7 @@ export const BLOK_J = {
             variabel: "Apakah dalam Keluarga terdapat permasalahan sosial berikut?",
             jenis: "MULTI_PILIHAN",
             wajib: true,
-            aturan:
-                "⚠️ Urutan opsi direkonstruksi dari tata letak tabel PDF 2 kolom yang nomornya sempat hilang -- perlu diverifikasi ulang ke dokumen asli",
+            aturan: null,
             opsi: [
                 { kode: "1", label: "Anak putus sekolah" },
                 { kode: "2", label: "Anak/remaja bekerja (pekerja anak)" },

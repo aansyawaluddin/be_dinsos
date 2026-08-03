@@ -97,7 +97,7 @@ export const BLOK_A = {
             kode: "A12",
             variabel: "Kepemilikan dokumen kependudukan (centang yang dimiliki)",
             jenis: "MULTI_PILIHAN",
-            wajib: false,
+            wajib: true,
             aturan: null,
             opsi: [
                 { kode: "1", label: "KTP" },
