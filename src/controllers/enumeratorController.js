@@ -11,17 +11,10 @@ import {
 } from "../utils/wargaMapper.js";
 
 const STATUS_LABEL = {
-    BELUM_DIWAWANCARA: "Survei",
+    BELUM_DIWAWANCARA: "Belum Disurvei",
     SUDAH_DIWAWANCARA: "Menunggu Validasi",
     DISETUJUI: "Disetujui",
     DITOLAK: "Ditolak",
-};
-
-const STATUS_DETAIL_LABEL = {
-    BELUM_DIWAWANCARA: "Belum Disurvei",
-    SUDAH_DIWAWANCARA: "Menunggu Validasi Admin",
-    DISETUJUI: "Valid (Disetujui)",
-    DITOLAK: "Tidak Valid (Ditolak)",
 };
 
 const BULAN_INDONESIA = [
@@ -269,7 +262,6 @@ export async function listTugasWarga(req, res) {
         nik: w.nik,
         nama: w.nama,
         inisial: getInitials(w.nama),
-        statusWawancara: w.statusWawancara,
         kendalaSurvei: w.kendalaSurvei,
         statusLabel: STATUS_LABEL[w.statusWawancara] ?? w.statusWawancara,
         keteranganValidasi: w.keteranganValidasi,
@@ -360,9 +352,8 @@ export async function getTugasWargaDetail(req, res) {
         usia: hitungUsia(warga.tanggalLahir),
         posisiDalamKeluarga: warga.hubunganKeluarga,
         kendalaSurvei: warga.kendalaSurvei,
-        statusWawancara: warga.statusWawancara,
         keteranganValidasi: warga.keteranganValidasi,
-        statusLabel: STATUS_DETAIL_LABEL[warga.statusWawancara] ?? warga.statusWawancara,
+        statusLabel: STATUS_LABEL[warga.statusWawancara] ?? warga.statusWawancara,
     });
 }
 

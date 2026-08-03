@@ -251,11 +251,11 @@ export async function cancelUpload(req, res) {
     return success(res, null, "Upload dibatalkan");
 }
 
-const STATUS_WAWANCARA_LABEL = {
+const STATUS_LABEL = {
     BELUM_DIWAWANCARA: "Belum Disurvei",
     SUDAH_DIWAWANCARA: "Menunggu Validasi",
-    DISETUJUI: "Valid (Disetujui)",
-    DITOLAK: "Tidak Valid (Ditolak)",
+    DISETUJUI: "Disetujui",
+    DITOLAK: "Ditolak",
 };
 
 export async function listWarga(req, res) {
@@ -306,8 +306,7 @@ export async function listWarga(req, res) {
         kelurahan: w.desaKelurahan,
         usia: hitungUsia(w.tanggalLahir),
         desilAwal: formatDesilLabel(w.desilTerbaru),
-        statusWawancara: w.statusWawancara,
-        statusLabel: STATUS_WAWANCARA_LABEL[w.statusWawancara] ?? w.statusWawancara,
+        statusLabel: STATUS_LABEL[w.statusWawancara] ?? w.statusWawancara,
         kendalaSurvei: w.kendalaSurvei,
     }));
 
@@ -349,7 +348,8 @@ export async function getWargaDetail(req, res) {
         kelurahan: warga.desaKelurahan,
         kecamatan: warga.kecamatan,
         usia: hitungUsia(warga.tanggalLahir),
-        statusLabel: STATUS_WAWANCARA_LABEL[warga.statusWawancara] ?? warga.statusWawancara,
+        statusLabel: STATUS_LABEL[warga.statusWawancara] ?? warga.statusWawancara,
+        keteranganValidasi: warga.keteranganValidasi,
         surveyor: warga.diwawancaraOleh?.nama ?? null,
     });
 }
