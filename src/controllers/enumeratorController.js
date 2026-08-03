@@ -370,20 +370,50 @@ export async function getInstrumen(req, res) {
         },
     });
 
-    const data = bloks.map((blok) => ({
-        kode: blok.kode,
-        judul: blok.judul,
-        pertanyaan: blok.pertanyaan.map((p) => ({
-            id: p.id,
-            kode: p.kode,
-            variabel: p.variabel,
-            jenis: p.jenis,
-            wajib: p.wajib,
-            aturan: p.aturan,
-            opsi: p.opsi.map((o) => ({ kode: o.kode, label: o.label })),
+    const PENJELASAN_KELOMPOK = {
+        "I1": "Apa kebutuhan paling mendesak yang belum terpenuhi saat ini? (pilih maksimal 3, urutkan 1=paling mendesak)",
+        "I2": "Seberapa mudah akses ke fasilitas berikut dari tempat tinggal Anda?"
+    };
 
-        })),
-    }));
+    const data = bloks.map((blok) => {
+        const listData = [];
+        let currentPrefix = "";
+
+        blok.pertanyaan.forEach((p) => {
+            const match = p.kode.match(/^[A-Z]\d+/);
+            const prefix = match ? match[0] : p.kode;
+
+            if (prefix !== currentPrefix) {
+                currentPrefix = prefix;
+
+                if (PENJELASAN_KELOMPOK[prefix]) {
+                    listData.push({
+                        tipe: "penjelasan",
+                        kode: prefix,
+                        teks: PENJELASAN_KELOMPOK[prefix],
+                    });
+                }
+            }
+
+            listData.push({
+                tipe: "pertanyaan",
+                id: p.id,
+                kode: p.kode,
+                variabel: p.variabel,
+                jenis: p.jenis,
+                wajib: p.wajib,
+                aturan: p.aturan,
+                opsi: p.opsi.map((o) => ({ kode: o.kode, label: o.label })),
+            });
+        });
+
+        return {
+            kode: blok.kode,
+            judul: blok.judul,
+            pertanyaan: listData,
+        };
+    });
+
     return success(res, { blok: data });
 }
 
