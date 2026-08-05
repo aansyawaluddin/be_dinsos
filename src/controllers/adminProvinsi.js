@@ -26,56 +26,84 @@ import {
 
 const UPLOAD_DIR = path.join(process.cwd(), "uploads");
 
+function findHeaderRow(sheet, maxScan = 10) {
+    for (let r = 0; r < maxScan; r++) {
+        const cell = sheet[XLSX.utils.encode_cell({ r, c: 0 })];
+        if (cell && String(cell.v).trim().toUpperCase() === "KABUPATEN") {
+            return r;
+        }
+    }
+    return null;
+}
+
 function readAndMapRows(filePath) {
     const workbook = XLSX.readFile(filePath, { cellDates: true });
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const rawRows = XLSX.utils.sheet_to_json(sheet, { defval: null });
 
-    return rawRows.map((row, idx) => {
-        const rowNumber = idx + 2;
-        const kabupatenLabel = clean(row["KABUPATEN"]);
-        const kabupatenKota = mapKabupaten(row["KABUPATEN"]);
-        const kecamatan = clean(row["KECAMATAN"]);
-        const desaKelurahan = clean(row["DESA_KELURAHAN"]);
-        const nomorKK = clean(row["nomor kartu keluarga"]);
-        const nik = clean(row["nomor induk kependudukan"]);
-        const nama = clean(row["nama"]);
+    const allRows = [];
 
-        const fieldErrors = [];
-        if (!kabupatenKota) fieldErrors.push(`KABUPATEN "${row["KABUPATEN"] ?? ""}" tidak dikenali`);
-        if (!kecamatan) fieldErrors.push("Kecamatan kosong");
-        if (!desaKelurahan) fieldErrors.push("Desa/Kelurahan kosong");
-        if (!nomorKK) fieldErrors.push("Nomor KK kosong");
-        if (!nama) fieldErrors.push("Nama kosong");
-        return {
-            rowNumber,
-            kabupatenLabel,
-            fieldErrors,
-            dbData: {
-                kabupatenKota,
-                kecamatan,
-                desaKelurahan,
-                alamat: clean(row["alamat"]),
-                rw: clean(row["rw"]),
-                rt: clean(row["rt"]),
-                desilTerbaru: clean(row["desil terbaru"]),
-                nomorKK,
-                nik,
-                nama,
-                jenisKelamin: mapJenisKelamin(row["jenis kelamin"]),
-                tanggalLahir: parseTanggalLahir(row["tanggal lahir"]),
-                tempatLahir: clean(row["tempat lahir"]),
-                statusPerkawinan: clean(row["status perkawinan"]),
-                hubunganKeluarga: clean(row["hubungan keluarga"]),
-                keberadaanAnggotaKeluarga: clean(row["keberadaan anggota keluarga"]),
-                disabilitas: clean(row["disabilitas"]),
-                keteranganDisabilitas: clean(row["keterangan disabilitas"]),
-                pbiJk: clean(row["PBI-JK"]),
-                bansosPkh: clean(row["BANSOS PKH"]),
-                bansosSembako: clean(row["BANSOS SEMBAKO"]),
-            },
-        };
-    });
+    for (const sheetName of workbook.SheetNames) {
+        const sheet = workbook.Sheets[sheetName];
+        const headerRowIdx = findHeaderRow(sheet);
+
+        if (headerRowIdx === null) {
+            continue;
+        }
+
+        const rawRows = XLSX.utils.sheet_to_json(sheet, {
+            defval: null,
+            range: headerRowIdx,
+        });
+
+        rawRows.forEach((row, idx) => {
+            const rowNumber = headerRowIdx + 2 + idx;
+            const kabupatenLabel = clean(row["KABUPATEN"]);
+            const kabupatenKota = mapKabupaten(row["KABUPATEN"]);
+            const kecamatan = clean(row["KECAMATAN"]);
+            const desaKelurahan = clean(row["DESA_KELURAHAN"]);
+            const nomorKK = clean(row["nomor kartu keluarga"]);
+            const nik = clean(row["nomor induk kependudukan"]);
+            const nama = clean(row["nama"]);
+
+            const fieldErrors = [];
+            if (!kabupatenKota) fieldErrors.push(`KABUPATEN "${row["KABUPATEN"] ?? ""}" tidak dikenali`);
+            if (!kecamatan) fieldErrors.push("Kecamatan kosong");
+            if (!desaKelurahan) fieldErrors.push("Desa/Kelurahan kosong");
+            if (!nomorKK) fieldErrors.push("Nomor KK kosong");
+            if (!nama) fieldErrors.push("Nama kosong");
+
+            allRows.push({
+                sheetName,
+                rowNumber,
+                kabupatenLabel,
+                fieldErrors,
+                dbData: {
+                    kabupatenKota,
+                    kecamatan,
+                    desaKelurahan,
+                    alamat: clean(row["alamat"]),
+                    rw: clean(row["rw"]),
+                    rt: clean(row["rt"]),
+                    desilTerbaru: clean(row["desil terbaru"]),
+                    nomorKK,
+                    nik,
+                    nama,
+                    jenisKelamin: mapJenisKelamin(row["jenis kelamin"]),
+                    tanggalLahir: parseTanggalLahir(row["tanggal lahir"]),
+                    tempatLahir: clean(row["tempat lahir"]),
+                    statusPerkawinan: clean(row["status perkawinan"]),
+                    hubunganKeluarga: clean(row["hubungan keluarga"]),
+                    keberadaanAnggotaKeluarga: clean(row["keberadaan anggota keluarga"]),
+                    disabilitas: clean(row["disabilitas"]),
+                    keteranganDisabilitas: clean(row["keterangan disabilitas"]),
+                    pbiJk: clean(row["PBI-JK"]),
+                    bansosPkh: clean(row["BANSOS PKH"]),
+                    bansosSembako: clean(row["BANSOS SEMBAKO"]),
+                },
+            });
+        });
+    }
+
+    return allRows;
 }
 
 async function analyzeRows(mappedRows) {
@@ -130,6 +158,7 @@ async function analyzeRows(mappedRows) {
 
         return {
             nomor: idx + 1,
+            sheet: r.sheetName,
             nik: dbData.nik,
             nama: dbData.nama,
             kelDesa: dbData.desaKelurahan,

@@ -306,7 +306,6 @@ export async function createSurveyor(req, res) {
     const kecamatanTugas = clean(req.body.kecamatanTugas);
     const nomorHp = clean(req.body.nomorHp);
 
-    // 2. Validasi Input
     if (!nama) {
         return error(res, "Nama lengkap wajib diisi", 400);
     }
@@ -329,7 +328,6 @@ export async function createSurveyor(req, res) {
 
     const hashedPassword = await hashPassword(DEFAULT_SURVEYOR_PASSWORD);
 
-    // 5. Simpan ke database
     const surveyor = await prisma.user.create({
         data: {
             nama,
@@ -477,63 +475,89 @@ export async function getSebaranWilayah(req, res) {
     });
 }
 
+
+function findHeaderRow(sheet, maxScan = 10) {
+    for (let r = 0; r < maxScan; r++) {
+        const cell = sheet[XLSX.utils.encode_cell({ r, c: 0 })];
+        if (cell && String(cell.v).trim().toUpperCase() === "KABUPATEN") {
+            return r; 
+        }
+    }
+    return null;
+}
+
 function readAndMapRows(filePath, kabupatenKotaAdmin) {
     const workbook = XLSX.readFile(filePath, { cellDates: true });
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const rawRows = XLSX.utils.sheet_to_json(sheet, { defval: null });
 
-    return rawRows.map((row, idx) => {
-        const rowNumber = idx + 2;
-        const kabupatenLabel = clean(row["KABUPATEN"]);
-        const kabupatenKotaExcel = mapKabupaten(row["KABUPATEN"]);
-        const kecamatan = clean(row["KECAMATAN"]);
-        const desaKelurahan = clean(row["DESA_KELURAHAN"]);
-        const nomorKK = clean(row["nomor kartu keluarga"]);
-        const nik = clean(row["nomor induk kependudukan"]);
-        const nama = clean(row["nama"]);
+    const allRows = [];
 
-        const fieldErrors = [];
-        if (!kabupatenKotaExcel) {
-            fieldErrors.push(`KABUPATEN "${row["KABUPATEN"] ?? ""}" tidak dikenali`);
-        } else if (kabupatenKotaExcel !== kabupatenKotaAdmin) {
-            fieldErrors.push(
-                `Baris ini untuk wilayah "${kabupatenLabel}", di luar wilayah Anda (${mapKabupatenLabel(kabupatenKotaAdmin)})`
-            );
-        }
-        if (!kecamatan) fieldErrors.push("Kecamatan kosong");
-        if (!desaKelurahan) fieldErrors.push("Desa/Kelurahan kosong");
-        if (!nomorKK) fieldErrors.push("Nomor KK kosong");
-        if (!nama) fieldErrors.push("Nama kosong");
+    for (const sheetName of workbook.SheetNames) {
+        const sheet = workbook.Sheets[sheetName];
+        const headerRowIdx = findHeaderRow(sheet);
 
-        return {
-            rowNumber,
-            kabupatenLabel,
-            fieldErrors,
-            dbData: {
-                kabupatenKota: kabupatenKotaAdmin,
-                kecamatan,
-                desaKelurahan,
-                alamat: clean(row["alamat"]),
-                rw: clean(row["rw"]),
-                rt: clean(row["rt"]),
-                desilTerbaru: clean(row["desil terbaru"]),
-                nomorKK,
-                nik,
-                nama,
-                jenisKelamin: mapJenisKelamin(row["jenis kelamin"]),
-                tanggalLahir: parseTanggalLahir(row["tanggal lahir"]),
-                tempatLahir: clean(row["tempat lahir"]),
-                statusPerkawinan: clean(row["status perkawinan"]),
-                hubunganKeluarga: clean(row["hubungan keluarga"]),
-                keberadaanAnggotaKeluarga: clean(row["keberadaan anggota keluarga"]),
-                disabilitas: clean(row["disabilitas"]),
-                keteranganDisabilitas: clean(row["keterangan disabilitas"]),
-                pbiJk: clean(row["PBI-JK"]),
-                bansosPkh: clean(row["BANSOS PKH"]),
-                bansosSembako: clean(row["BANSOS SEMBAKO"]),
-            },
-        };
-    });
+        if (headerRowIdx === null) continue;
+
+        const rawRows = XLSX.utils.sheet_to_json(sheet, {
+            defval: null,
+            range: headerRowIdx,
+        });
+
+        rawRows.forEach((row, idx) => {
+            const rowNumber = headerRowIdx + 2 + idx;
+            const kabupatenLabel = clean(row["KABUPATEN"]);
+            const kabupatenKotaExcel = mapKabupaten(row["KABUPATEN"]);
+            const kecamatan = clean(row["KECAMATAN"]);
+            const desaKelurahan = clean(row["DESA_KELURAHAN"]);
+            const nomorKK = clean(row["nomor kartu keluarga"]);
+            const nik = clean(row["nomor induk kependudukan"]);
+            const nama = clean(row["nama"]);
+
+            const fieldErrors = [];
+            if (!kabupatenKotaExcel) {
+                fieldErrors.push(`KABUPATEN "${row["KABUPATEN"] ?? ""}" tidak dikenali`);
+            } else if (kabupatenKotaExcel !== kabupatenKotaAdmin) {
+                fieldErrors.push(
+                    `Baris ini untuk wilayah "${kabupatenLabel}", di luar wilayah Anda (${mapKabupatenLabel(kabupatenKotaAdmin)})`
+                );
+            }
+            if (!kecamatan) fieldErrors.push("Kecamatan kosong");
+            if (!desaKelurahan) fieldErrors.push("Desa/Kelurahan kosong");
+            if (!nomorKK) fieldErrors.push("Nomor KK kosong");
+            if (!nama) fieldErrors.push("Nama kosong");
+
+            allRows.push({
+                sheetName,
+                rowNumber,
+                kabupatenLabel,
+                fieldErrors,
+                dbData: {
+                    kabupatenKota: kabupatenKotaAdmin,
+                    kecamatan,
+                    desaKelurahan,
+                    alamat: clean(row["alamat"]),
+                    rw: clean(row["rw"]),
+                    rt: clean(row["rt"]),
+                    desilTerbaru: clean(row["desil terbaru"]),
+                    nomorKK,
+                    nik,
+                    nama,
+                    jenisKelamin: mapJenisKelamin(row["jenis kelamin"]),
+                    tanggalLahir: parseTanggalLahir(row["tanggal lahir"]),
+                    tempatLahir: clean(row["tempat lahir"]),
+                    statusPerkawinan: clean(row["status perkawinan"]),
+                    hubunganKeluarga: clean(row["hubungan keluarga"]),
+                    keberadaanAnggotaKeluarga: clean(row["keberadaan anggota keluarga"]),
+                    disabilitas: clean(row["disabilitas"]),
+                    keteranganDisabilitas: clean(row["keterangan disabilitas"]),
+                    pbiJk: clean(row["PBI-JK"]),
+                    bansosPkh: clean(row["BANSOS PKH"]),
+                    bansosSembako: clean(row["BANSOS SEMBAKO"]),
+                },
+            });
+        });
+    }
+
+    return allRows;
 }
 
 async function analyzeRows(mappedRows) {
