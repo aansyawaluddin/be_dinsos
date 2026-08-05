@@ -6,17 +6,19 @@ const prisma = new PrismaClient();
 async function main() {
     const defaultPassword = await bcrypt.hash("password123", 10);
 
-    await prisma.user.upsert({
-        where: { username: "admin.provinsi" },
-        update: {},
-        create: {
-            nama: "Admin Provinsi",
-            username: "admin.provinsi",
-            password: defaultPassword,
-            role: "ADMIN_PROVINSI",
-            kabupatenKota: null,
-        },
-    });
+    for (let i = 1; i <= 10; i++) {
+        await prisma.user.upsert({
+            where: { username: `admin.provinsi${i}` },
+            update: {},
+            create: {
+                nama: `Admin Provinsi ${i}`,
+                username: `admin.provinsi${i}`,
+                password: defaultPassword,
+                role: "ADMIN_PROVINSI",
+                kabupatenKota: null,
+            },
+        });
+    }
 
     await prisma.user.upsert({
         where: { username: "admin.palu" },
@@ -42,8 +44,8 @@ async function main() {
         },
     });
 
-    console.log("3 akun contoh berhasil di-seed (password: password123)");
-    console.log("Login pakai username: admin.provinsi / admin.palu / enumerator1");
+    console.log("12 akun contoh berhasil di-seed (password: password123)");
+    console.log("Login pakai username: admin.provinsi1 - admin.provinsi10 / admin.palu / enumerator1");
 }
 
 main()
