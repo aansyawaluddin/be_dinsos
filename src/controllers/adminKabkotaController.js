@@ -282,7 +282,7 @@ export async function getCharts(req, res) {
 
     const statusCountMap = Object.fromEntries(groupedStatus.map((g) => [g.statusWawancara, g._count._all]));
     const statusItems = [
-        { label: "Sudah Disurvei", jumlah: statusCountMap.SUDAH_DIWAWANCARA || 0 },
+        { label: "Sudah Disurvei", jumlah: statusCountMap.DISETUJUI || 0 },
         { label: "Belum Disurvei", jumlah: statusCountMap.BELUM_DIWAWANCARA || 0 },
     ];
 
@@ -421,7 +421,7 @@ export async function getSebaranWilayah(req, res) {
 
     const [totalResponden, sudahTersinkron, enumeratorAktif] = await Promise.all([
         prisma.warga.count({ where: whereGlobal }),
-        prisma.warga.count({ where: { ...whereGlobal, statusWawancara: "SUDAH_DIWAWANCARA" } }),
+        prisma.warga.count({ where: { ...whereGlobal, statusWawancara: "DISETUJUI" } }),
         prisma.user.count({ where: { role: "ENUMERATOR", aktif: true, kabupatenKota } }),
     ]);
 
