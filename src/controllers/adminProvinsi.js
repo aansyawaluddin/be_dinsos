@@ -494,13 +494,24 @@ export async function createAdminKabKota(req, res) {
         return error(res, "Username sudah digunakan, silakan pilih yang lain", 400);
     }
 
+    const existingAdmin = await prisma.user.findFirst({
+        where: {
+            role: "ADMIN_KABKOTA",
+            kabupatenKota: kabupatenKota,
+        },
+    });
+
+    if (existingAdmin) {
+        return error(res, `Wilayah ${mapKabupatenLabel(kabupatenKota) || kabupatenKota} sudah memiliki Admin Kab/Kota, pendaftaran dibatalkan.`, 400);
+    }
+
     const hashedPassword = await hashPassword(DEFAULT_ADMIN_PASSWORD);
 
     const admin = await prisma.user.create({
         data: {
             nama,
             username,
-            kabupatenKota, // Wajib untuk admin kab/kota
+            kabupatenKota,
             nomorHp,
             password: hashedPassword,
             role: "ADMIN_KABKOTA",
@@ -521,7 +532,6 @@ export async function createAdminKabKota(req, res) {
         201
     );
 }
-
 export async function listAdminKabKota(req, res) {
     const { search } = req.query;
 
