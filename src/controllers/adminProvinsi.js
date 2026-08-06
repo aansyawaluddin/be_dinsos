@@ -806,7 +806,7 @@ export async function deleteSurveyor(req, res) {
 }
 
 export async function getSebaranWilayah(req, res) {
-    const { kabupatenKota, statusWawancara, desil } = req.query;
+    const { kabupatenKota, desil } = req.query;
 
     const whereGlobal = {};
     if (kabupatenKota) whereGlobal.kabupatenKota = kabupatenKota;
@@ -833,8 +833,8 @@ export async function getSebaranWilayah(req, res) {
         ...whereGlobal,
         latitude: { not: null },
         longitude: { not: null },
+        statusWawancara: "DISETUJUI",
     };
-    if (statusWawancara) wherePeta.statusWawancara = statusWawancara;
 
     let rows = await prisma.warga.findMany({
         where: wherePeta,

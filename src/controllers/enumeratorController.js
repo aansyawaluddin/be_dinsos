@@ -112,7 +112,7 @@ export async function getDashboard(req, res) {
 
     const [total, selesai] = await Promise.all([
         prisma.warga.count({ where }),
-        prisma.warga.count({ where: { ...where, statusWawancara: "SUDAH_DIWAWANCARA" } }),
+        prisma.warga.count({ where: { ...where, statusWawancara: "DISETUJUI" } }),
     ]);
 
     const belum = total - selesai;

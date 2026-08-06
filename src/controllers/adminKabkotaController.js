@@ -416,7 +416,7 @@ export async function getSebaranWilayah(req, res) {
     const kabupatenKota = requireRegion(req, res);
     if (!kabupatenKota) return;
 
-    const { statusWawancara, desil } = req.query;
+    const { desil } = req.query;
     const whereGlobal = { kabupatenKota };
 
     const [totalResponden, sudahTersinkron, enumeratorAktif] = await Promise.all([
@@ -432,8 +432,8 @@ export async function getSebaranWilayah(req, res) {
         ...whereGlobal,
         latitude: { not: null },
         longitude: { not: null },
+        statusWawancara: "DISETUJUI",
     };
-    if (statusWawancara) wherePeta.statusWawancara = statusWawancara;
 
     let rows = await prisma.warga.findMany({
         where: wherePeta,
@@ -480,7 +480,7 @@ function findHeaderRow(sheet, maxScan = 10) {
     for (let r = 0; r < maxScan; r++) {
         const cell = sheet[XLSX.utils.encode_cell({ r, c: 0 })];
         if (cell && String(cell.v).trim().toUpperCase() === "KABUPATEN") {
-            return r; 
+            return r;
         }
     }
     return null;
