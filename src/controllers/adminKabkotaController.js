@@ -282,8 +282,10 @@ export async function getCharts(req, res) {
 
     const statusCountMap = Object.fromEntries(groupedStatus.map((g) => [g.statusWawancara, g._count._all]));
     const statusItems = [
-        { label: "Sudah Disurvei", jumlah: statusCountMap.DISETUJUI || 0 },
         { label: "Belum Disurvei", jumlah: statusCountMap.BELUM_DIWAWANCARA || 0 },
+        { label: "Sudah Disurvei", jumlah: statusCountMap.SUDAH_DIWAWANCARA || 0 },
+        { label: "Disetujui", jumlah: statusCountMap.DISETUJUI || 0 },
+        { label: "Ditolak", jumlah: statusCountMap.DITOLAK || 0 },
     ];
 
     const sumJumlah = (items) => items.reduce((sum, item) => sum + item.jumlah, 0);
