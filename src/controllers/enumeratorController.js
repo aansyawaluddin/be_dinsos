@@ -485,6 +485,17 @@ export async function submitWawancara(req, res) {
         return error(res, "Warga ini di luar wilayah tugas Anda", 403);
     }
 
+    if (["SUDAH_DIWAWANCARA", "DISETUJUI"].includes(warga.statusWawancara)) {
+        unlinkSemuaFile();
+        return error(
+            res,
+            warga.statusWawancara === "DISETUJUI"
+                ? "Wawancara ini sudah divalidasi/disetujui, tidak bisa diubah lagi"
+                : "Wawancara ini sedang menunggu validasi, tidak bisa disurvei ulang",
+            400
+        );
+    }
+
     const semuaPertanyaan = await prisma.pertanyaanWawancara.findMany({
         include: { opsi: true },
     });
@@ -603,7 +614,6 @@ export async function submitWawancara(req, res) {
     const hasLatitude = latitude !== undefined && latitude !== null && latitude !== "";
     const hasLongitude = longitude !== undefined && longitude !== null && longitude !== "";
 
-    // Path relatif terhadap folder uploads/, otomatis "warga/{nik}/foto_....jpg" dsb
     const fotoPathBaru = path.relative(UPLOAD_ROOT, fotoFile.path);
     const fotoRumahPathBaru = path.relative(UPLOAD_ROOT, fotoRumahFile.path);
     const ttdRespondenPathBaru = path.relative(UPLOAD_ROOT, ttdRespondenFile.path);
@@ -613,6 +623,7 @@ export async function submitWawancara(req, res) {
         where: { id },
         data: {
             statusWawancara: "SUDAH_DIWAWANCARA",
+            keteranganValidasi: null, 
             tanggalWawancara: new Date(),
             diwawancaraOlehId: surveyorId,
             fotoDokumentasi: fotoPathBaru,
@@ -624,7 +635,6 @@ export async function submitWawancara(req, res) {
         },
     });
 
-    // Hapus file lama kalau diganti dengan yang baru
     if (warga.fotoDokumentasi && warga.fotoDokumentasi !== fotoPathBaru) {
         unlinkSafe(path.join(UPLOAD_ROOT, warga.fotoDokumentasi));
     }

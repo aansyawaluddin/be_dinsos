@@ -59,10 +59,17 @@ export const BLOK_F = {
         },
         {
             kode: "F3a",
-            variabel: "Sumber BLT (jika F3 = 'Sedang menerima')",
-            jenis: "TEKS",
+            variabel: "Sumber Bantuan Langsung Tunai (BLT)",
+            jenis: "MULTI_PILIHAN",
             wajib: false,
-            aturan: "Diisi hanya jika F3 = 'Sedang menerima'",
+            aturan: "Diisi hanya jika F3 = 'Sedang menerima'. Boleh pilih lebih dari satu.",
+            opsi: [
+                { kode: "1", label: "BLT Dana Desa (BLT-DD)" },
+                { kode: "2", label: "Bantuan Pangan Non Tunai (BPNT)/Program Sembako berupa uang" },
+                { kode: "3", label: "Bantuan Sosial Tunai (BST)" },
+                { kode: "4", label: "BLT dari Pemerintah Daerah (Provinsi/Kabupaten/Kota)" },
+                { kode: "5", label: "BLT akibat bencana/keadaan darurat" },
+            ],
         },
         {
             kode: "F4",
@@ -78,7 +85,7 @@ export const BLOK_F = {
         },
         {
             kode: "F5",
-            variabel: "Bantuan sosial lain dari pemerintah daerah",
+            variabel: "Bantuan sosial lain dari pemerintah daerah dalam 3 tahun terakhir",
             jenis: "PILIHAN_TUNGGAL",
             wajib: true,
             aturan: null,
