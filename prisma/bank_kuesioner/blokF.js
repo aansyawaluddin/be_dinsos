@@ -22,14 +22,9 @@ export const BLOK_F = {
             wajib: false,
             aturan: "Diisi hanya jika F1 = 'Sedang menerima' atau 'Pernah menerima, kini tidak'. Boleh pilih lebih dari satu.",
             opsi: [
-                { kode: "1", label: "Kesehatan - Ibu Hamil" },
-                { kode: "2", label: "Kesehatan - Ibu Menyusui" },
-                { kode: "3", label: "Kesehatan - Bayi" },
-                { kode: "4", label: "Pendidikan - Anak SD" },
-                { kode: "5", label: "Pendidikan - Anak SMP" },
-                { kode: "6", label: "Pendidikan - Anak SMA" },
-                { kode: "7", label: "Kesejahteraan Sosial - Lanjut Usia" },
-                { kode: "8", label: "Kesejahteraan Sosial - Disabilitas" },
+                { kode: "1", label: "Komponen Pendidikan (Anak PAUD, SD, SMP/Mts, SMA/SMK sederajat)" },
+                { kode: "2", label: "Komponen Kesehatan (Ibu hamil, ibu menyusui, bayi)" },
+                { kode: "3", label: "Komponen Kesejahteraan Sosial (lansia diatas 70 tahun, penyandang disabilitas)" },
             ],
         },
         {
