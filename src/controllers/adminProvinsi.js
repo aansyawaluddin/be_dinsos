@@ -474,12 +474,19 @@ export async function getCharts(req, res) {
         }),
     ]);
 
-    const desilAwalItems = groupedDesil
-        .map((g) => ({
-            label: formatDesilLabel(g.desilTerbaru) ?? g.desilTerbaru,
-            urutan: extractDesil(g.desilTerbaru) ?? 999,
-            jumlah: g._count._all,
-        }))
+    const desilMap = new Map();
+    groupedDesil.forEach((g) => {
+        const urutan = extractDesil(g.desilTerbaru) ?? 999;
+        const label = formatDesilLabel(g.desilTerbaru) ?? g.desilTerbaru;
+        const existing = desilMap.get(urutan);
+        if (existing) {
+            existing.jumlah += g._count._all;
+        } else {
+            desilMap.set(urutan, { label, urutan, jumlah: g._count._all });
+        }
+    });
+
+    const desilAwalItems = [...desilMap.values()]
         .sort((a, b) => a.urutan - b.urutan)
         .map(({ label, jumlah }) => ({ label, jumlah }));
 
@@ -503,6 +510,7 @@ export async function getCharts(req, res) {
         wilayah: { items: wilayahItems, total: sumJumlah(wilayahItems) },
     });
 }
+
 const DEFAULT_ADMIN_PASSWORD = "12345";
 
 export async function createAdminKabKota(req, res) {
