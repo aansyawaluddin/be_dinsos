@@ -428,6 +428,42 @@ export async function listSurveyor(req, res) {
     return success(res, { items, total: items.length });
 }
 
+export async function resetPasswordSurveyor(req, res) {
+    const kabupatenKota = requireRegion(req, res);
+    if (!kabupatenKota) return;
+
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+        return error(res, "ID surveyor tidak valid", 400);
+    }
+
+    const surveyor = await prisma.user.findUnique({ where: { id } });
+
+    if (!surveyor || surveyor.role !== "ENUMERATOR") {
+        return error(res, "Surveyor tidak ditemukan", 404);
+    }
+
+    if (surveyor.kabupatenKota !== kabupatenKota) {
+        return error(res, "Surveyor ini di luar wilayah Anda", 403);
+    }
+
+    const hashedPassword = await hashPassword(DEFAULT_SURVEYOR_PASSWORD);
+
+    await prisma.user.update({
+        where: { id },
+        data: {
+            password: hashedPassword,
+            tokenVersion: { increment: 1 }, 
+        },
+    });
+
+    return success(
+        res,
+        { id: surveyor.id, nama: surveyor.nama, username: surveyor.username },
+        `Password berhasil direset ke default (${DEFAULT_SURVEYOR_PASSWORD})`
+    );
+}
+
 export async function getSebaranWilayah(req, res) {
     const kabupatenKota = requireRegion(req, res);
     if (!kabupatenKota) return;

@@ -20,6 +20,9 @@ router.post("/surveyor", authenticate, authorize("ADMIN_KABKOTA"), asyncHandler(
 
 router.get("/surveyor", authenticate, authorize("ADMIN_KABKOTA"), asyncHandler(ctrl.listSurveyor));
 
+router.patch("/surveyor/:id/reset-password", authenticate, authorize("ADMIN_KABKOTA"), asyncHandler(ctrl.resetPasswordSurveyor)
+);
+
 router.get(
     "/sebaran-wilayah",
     authenticate,
