@@ -27,10 +27,14 @@ import {
 const UPLOAD_DIR = path.join(process.cwd(), "uploads");
 
 function findHeaderRow(sheet, maxScan = 10) {
-    for (let r = 0; r < maxScan; r++) {
-        const cell = sheet[XLSX.utils.encode_cell({ r, c: 0 })];
-        if (cell && String(cell.v).trim().toUpperCase() === "KABUPATEN") {
-            return r;
+    const range = XLSX.utils.decode_range(sheet["!ref"] || "A1:A1");
+    const lastRow = Math.min(maxScan, range.e.r);
+    for (let r = 0; r <= lastRow; r++) {
+        for (let c = range.s.c; c <= range.e.c; c++) {
+            const cell = sheet[XLSX.utils.encode_cell({ r, c })];
+            if (cell && String(cell.v).trim().toUpperCase() === "KABUPATEN") {
+                return r;
+            }
         }
     }
     return null;
@@ -83,7 +87,7 @@ function readAndMapRows(filePath) {
                     alamat: clean(row["alamat"]),
                     rw: clean(row["rw"]),
                     rt: clean(row["rt"]),
-                    desilTerbaru: clean(row["desil terbaru"]),
+                    desilTerbaru: clean(row["desil_nasional"]),
                     nomorKK,
                     nik,
                     nama,
@@ -234,20 +238,28 @@ export async function importWarga(req, res) {
 
     const rowsToImport = mappedRows.filter((_, idx) => preview[idx].bisaDiimpor);
 
+    const CHUNK_SIZE = 500;
     let berhasil = 0;
     const gagalImport = [];
 
-    for (const r of rowsToImport) {
+    for (let i = 0; i < rowsToImport.length; i += CHUNK_SIZE) {
+        const chunk = rowsToImport.slice(i, i + CHUNK_SIZE);
+        const chunkData = chunk.map((r) => ({ ...r.dbData, createdById: req.user.id }));
+
         try {
-            await prisma.warga.create({
-                data: {
-                    ...r.dbData,
-                    createdById: req.user.id,
-                },
-            });
-            berhasil++;
+            const result = await prisma.warga.createMany({ data: chunkData });
+            berhasil += result.count;
         } catch (err) {
-            gagalImport.push({ rowNumber: r.rowNumber, reason: err.message });
+            for (const r of chunk) {
+                try {
+                    await prisma.warga.create({
+                        data: { ...r.dbData, createdById: req.user.id },
+                    });
+                    berhasil++;
+                } catch (rowErr) {
+                    gagalImport.push({ rowNumber: r.rowNumber, reason: rowErr.message });
+                }
+            }
         }
     }
 

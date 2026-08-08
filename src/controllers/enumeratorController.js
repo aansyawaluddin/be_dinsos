@@ -197,7 +197,6 @@ export async function createWargaBaru(req, res) {
                 bansosSembako: bansosSembako || null,
                 kabupatenKota: surveyor.kabupatenKota,
                 kecamatan: surveyor.kecamatanTugas,
-
                 createdById: surveyorId,
                 statusWawancara: "BELUM_DIWAWANCARA"
             }
