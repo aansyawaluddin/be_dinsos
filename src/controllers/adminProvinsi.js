@@ -641,6 +641,7 @@ export async function createSurveyor(req, res) {
     const nama = clean(req.body.nama);
     const usernameRaw = clean(req.body.username);
     const kecamatanTugas = clean(req.body.kecamatanTugas);
+    const kelurahanTugas = clean(req.body.kelurahanTugas);
     const kabupatenKotaRaw = clean(req.body.kabupatenKota);
     const nomorHp = clean(req.body.nomorHp);
 
@@ -652,6 +653,9 @@ export async function createSurveyor(req, res) {
     }
     if (!kecamatanTugas) {
         return error(res, "Kecamatan tugas wajib diisi", 400);
+    }
+    if (!kelurahanTugas) {
+        return error(res, "Kelurahan tugas wajib diisi", 400);
     }
     if (!kabupatenKotaRaw) {
         return error(res, "Kabupaten/Kota wajib diisi", 400);
@@ -674,6 +678,7 @@ export async function createSurveyor(req, res) {
             nama,
             username,
             kecamatanTugas,
+            kelurahanTugas,
             kabupatenKota,
             nomorHp,
             password: hashedPassword,
@@ -688,6 +693,7 @@ export async function createSurveyor(req, res) {
             nama: surveyor.nama,
             username: surveyor.username,
             kecamatanTugas: surveyor.kecamatanTugas,
+            kelurahanTugas: surveyor.kelurahanTugas,
             kabupatenKota: surveyor.kabupatenKota,
             nomorHp: surveyor.nomorHp,
             aktif: surveyor.aktif,
@@ -715,6 +721,7 @@ export async function listSurveyor(req, res) {
             nama: true,
             username: true,
             kecamatanTugas: true,
+            kelurahanTugas: true,
             kabupatenKota: true,
             nomorHp: true,
             aktif: true,
@@ -740,6 +747,7 @@ export async function listSurveyor(req, res) {
         inisial: getInitials(s.nama),
         fotoProfil: s.fotoProfil ? `/uploads/${s.fotoProfil}` : null,
         kecamatanTugas: s.kecamatanTugas,
+        kelurahanTugas: s.kelurahanTugas,
         kabupatenKota: s.kabupatenKota,
         nomorHp: s.nomorHp,
         aktif: s.aktif,

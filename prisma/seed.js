@@ -41,6 +41,8 @@ async function main() {
             password: defaultPassword,
             role: "ENUMERATOR",
             kabupatenKota: "KOTA_PALU",
+            kecamatanTugas: "Palu Selatan",
+            kelurahanTugas: "Birobuli Selatan",
         },
     });
 

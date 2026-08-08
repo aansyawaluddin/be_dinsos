@@ -35,6 +35,7 @@ async function getSurveyorRegion(userId) {
         select: {
             nama: true,
             kecamatanTugas: true,
+            kelurahanTugas: true,
             kabupatenKota: true,
             fotoProfil: true
         },
@@ -42,7 +43,7 @@ async function getSurveyorRegion(userId) {
 }
 
 function wilayahLengkap(surveyor) {
-    return Boolean(surveyor?.kabupatenKota && surveyor?.kecamatanTugas);
+    return Boolean(surveyor?.kabupatenKota && surveyor?.kecamatanTugas && surveyor?.kelurahanTugas);
 }
 
 function unlinkSafe(filePath) {
@@ -98,6 +99,7 @@ export async function getDashboard(req, res) {
                 fotoProfil: fotoProfilUrl,
                 kabupatenKota: surveyor?.kabupatenKota ?? null,
                 kecamatanTugas: null,
+                kelurahanTugas: null,
                 tanggal: formatTanggalIndonesia(new Date()),
                 progress: { totalTugas: 0, selesai: 0, belum: 0, persentase: 0 },
             },
@@ -108,6 +110,7 @@ export async function getDashboard(req, res) {
     const where = {
         kabupatenKota: surveyor.kabupatenKota,
         kecamatan: surveyor.kecamatanTugas,
+        desaKelurahan: surveyor.kelurahanTugas,
     };
 
     const [total, selesai] = await Promise.all([
@@ -123,6 +126,7 @@ export async function getDashboard(req, res) {
         fotoProfil: fotoProfilUrl,
         kabupatenKota: surveyor.kabupatenKota,
         kecamatanTugas: surveyor.kecamatanTugas,
+        kelurahanTugas: surveyor.kelurahanTugas,
         tanggal: formatTanggalIndonesia(new Date()),
         progress: { totalTugas: total, selesai, belum, persentase },
     });
@@ -138,7 +142,6 @@ export async function createWargaBaru(req, res) {
     }
 
     const {
-        desaKelurahan,
         alamat,
         rw,
         rt,
@@ -159,8 +162,8 @@ export async function createWargaBaru(req, res) {
         bansosSembako
     } = req.body;
 
-    if (!nik || !nomorKK || !nama || !desaKelurahan) {
-        return error(res, "NIK, Nomor KK, Nama, dan Desa/Kelurahan wajib diisi", 400);
+    if (!nik || !nomorKK || !nama) {
+        return error(res, "NIK, Nomor KK, dan Nama wajib diisi", 400);
     }
     const existingWarga = await prisma.warga.findUnique({
         where: { nik }
@@ -176,7 +179,7 @@ export async function createWargaBaru(req, res) {
                 nik,
                 nomorKK,
                 nama,
-                desaKelurahan,
+                desaKelurahan: surveyor.kelurahanTugas,
                 alamat: alamat || null,
                 rt: rt ? String(rt) : null,
                 rw: rw ? String(rw) : null,
@@ -226,6 +229,7 @@ export async function listTugasWarga(req, res) {
     const where = {
         kabupatenKota: surveyor.kabupatenKota,
         kecamatan: surveyor.kecamatanTugas,
+        desaKelurahan: surveyor.kelurahanTugas,
     };
 
     if (status === "selesai") {
@@ -293,7 +297,8 @@ export async function reportKendalaSurvei(req, res) {
     if (
         !wilayahLengkap(surveyor) ||
         warga.kabupatenKota !== surveyor.kabupatenKota ||
-        warga.kecamatan !== surveyor.kecamatanTugas
+        warga.kecamatan !== surveyor.kecamatanTugas ||
+        warga.desaKelurahan !== surveyor.kelurahanTugas
     ) {
         return error(res, "Warga ini di luar wilayah tugas Anda", 403);
     }
@@ -334,7 +339,8 @@ export async function getTugasWargaDetail(req, res) {
     if (
         !wilayahLengkap(surveyor) ||
         warga.kabupatenKota !== surveyor.kabupatenKota ||
-        warga.kecamatan !== surveyor.kecamatanTugas
+        warga.kecamatan !== surveyor.kecamatanTugas ||
+        warga.desaKelurahan !== surveyor.kelurahanTugas
     ) {
         return error(res, "Warga ini di luar wilayah tugas Anda", 403);
     }
@@ -479,7 +485,8 @@ export async function submitWawancara(req, res) {
     if (
         !wilayahLengkap(surveyor) ||
         warga.kabupatenKota !== surveyor.kabupatenKota ||
-        warga.kecamatan !== surveyor.kecamatanTugas
+        warga.kecamatan !== surveyor.kecamatanTugas ||
+        warga.desaKelurahan !== surveyor.kelurahanTugas
     ) {
         unlinkSemuaFile();
         return error(res, "Warga ini di luar wilayah tugas Anda", 403);
@@ -623,7 +630,7 @@ export async function submitWawancara(req, res) {
         where: { id },
         data: {
             statusWawancara: "SUDAH_DIWAWANCARA",
-            keteranganValidasi: null, 
+            keteranganValidasi: null,
             tanggalWawancara: new Date(),
             diwawancaraOlehId: surveyorId,
             fotoDokumentasi: fotoPathBaru,
@@ -682,6 +689,7 @@ export async function getHasilWawancara(req, res) {
                 nama: true,
                 kabupatenKota: true,
                 kecamatan: true,
+                desaKelurahan: true,
                 fotoDokumentasi: true,
                 fotoRumah: true,
                 tandaTanganResponden: true,
@@ -696,7 +704,8 @@ export async function getHasilWawancara(req, res) {
     if (
         !wilayahLengkap(surveyor) ||
         warga.kabupatenKota !== surveyor.kabupatenKota ||
-        warga.kecamatan !== surveyor.kecamatanTugas
+        warga.kecamatan !== surveyor.kecamatanTugas ||
+        warga.desaKelurahan !== surveyor.kelurahanTugas
     ) {
         return error(res, "Warga ini di luar wilayah tugas Anda", 403);
     }
