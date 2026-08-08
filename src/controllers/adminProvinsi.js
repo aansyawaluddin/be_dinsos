@@ -111,6 +111,19 @@ function readAndMapRows(filePath) {
 }
 
 async function analyzeRows(mappedRows) {
+    const firstOccurrence = {};
+    mappedRows.forEach((r) => {
+        const nik = r.dbData.nik;
+        if (nik && !firstOccurrence[nik]) {
+            firstOccurrence[nik] = {
+                rowNumber: r.rowNumber,
+                nama: r.dbData.nama,
+                kelDesa: r.dbData.desaKelurahan,
+                kecamatan: r.dbData.kecamatan,
+            };
+        }
+    });
+
     const nikCount = {};
     mappedRows.forEach((r) => {
         if (r.dbData.nik) nikCount[r.dbData.nik] = (nikCount[r.dbData.nik] || 0) + 1;
@@ -120,10 +133,10 @@ async function analyzeRows(mappedRows) {
     const existing = niksInFile.length
         ? await prisma.warga.findMany({
             where: { nik: { in: niksInFile } },
-            select: { nik: true },
+            select: { nik: true, nama: true, desaKelurahan: true, kecamatan: true },
         })
         : [];
-    const existingNikSet = new Set(existing.map((w) => w.nik));
+    const existingMap = new Map(existing.map((w) => [w.nik, w]));
 
     let siapDiimpor = 0;
     let duplikatNik = 0;
@@ -134,7 +147,8 @@ async function analyzeRows(mappedRows) {
         const { rowNumber, dbData, kabupatenLabel, fieldErrors } = r;
         const isNikKosong = !dbData.nik;
         const isDuplicateInFile = dbData.nik ? nikCount[dbData.nik] > 1 : false;
-        const isDuplicateInDb = dbData.nik ? existingNikSet.has(dbData.nik) : false;
+        const existingDb = dbData.nik ? existingMap.get(dbData.nik) : null;
+        const isDuplicateInDb = Boolean(existingDb);
         const isDuplicate = isDuplicateInFile || isDuplicateInDb;
         const hasFieldErrors = fieldErrors.length > 0;
 
@@ -142,15 +156,38 @@ async function analyzeRows(mappedRows) {
 
         let status = "SIAP";
         let alasan = null;
+        let duplikatDari = null;
+
         if (isNikKosong) {
             status = "NIK_KOSONG";
             alasan = "NIK kosong";
             nikKosong++;
         } else if (isDuplicate) {
             status = "DUPLIKAT";
-            alasan = isDuplicateInDb
-                ? "NIK sudah terdaftar di database"
-                : "NIK duplikat dengan baris lain di file ini";
+            if (isDuplicateInDb) {
+                alasan = "NIK sudah terdaftar di database";
+                duplikatDari = {
+                    sumber: "DATABASE",
+                    nik: dbData.nik,
+                    nama: existingDb.nama,
+                    kelurahan: existingDb.desaKelurahan,
+                    kecamatan: existingDb.kecamatan,
+                };
+            } else {
+                alasan = "NIK duplikat dengan baris lain di file ini";
+                const asal = firstOccurrence[dbData.nik];
+                const iniBarisAsli = asal?.rowNumber === rowNumber;
+                duplikatDari = iniBarisAsli
+                    ? null 
+                    : {
+                        sumber: "FILE",
+                        baris: asal?.rowNumber,
+                        nik: dbData.nik,
+                        nama: asal?.nama,
+                        kelurahan: asal?.kelDesa,
+                        kecamatan: asal?.kecamatan,
+                    };
+            }
             duplikatNik++;
         } else if (hasFieldErrors) {
             status = "TIDAK_VALID";
@@ -177,6 +214,7 @@ async function analyzeRows(mappedRows) {
             bisaDiimpor,
             status,
             alasan,
+            duplikatDari,
         };
     });
 
@@ -250,6 +288,7 @@ export async function importWarga(req, res) {
             const result = await prisma.warga.createMany({ data: chunkData });
             berhasil += result.count;
         } catch (err) {
+            // Ada baris di batch ini yang bentrok (misal NIK duplikat) -> fallback satu-satu cuma buat chunk ini
             for (const r of chunk) {
                 try {
                     await prisma.warga.create({
@@ -510,7 +549,6 @@ export async function getCharts(req, res) {
         wilayah: { items: wilayahItems, total: sumJumlah(wilayahItems) },
     });
 }
-
 const DEFAULT_ADMIN_PASSWORD = "12345";
 
 export async function createAdminKabKota(req, res) {

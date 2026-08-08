@@ -25,7 +25,6 @@ async function main() {
 
     console.log("\nMenghapus (dalam satu transaksi, sesuai urutan foreign key)...\n");
 
-    // Urutan wajib: child dulu baru parent, biar gak kena FK constraint error
     const [jawabanOpsi, jawaban, warga, opsi, pertanyaan, blok] = await prisma.$transaction([
         prisma.jawabanOpsiDipilih.deleteMany(),
         prisma.jawabanWawancara.deleteMany(),
@@ -41,6 +40,23 @@ async function main() {
     console.log(`- opsi_jawaban         : ${opsi.count} baris dihapus`);
     console.log(`- pertanyaan_wawancara : ${pertanyaan.count} baris dihapus`);
     console.log(`- blok_wawancara       : ${blok.count} baris dihapus`);
+
+    console.log("\nReset AUTO_INCREMENT balik ke 1...\n");
+
+    const tabelUntukReset = [
+        "jawaban_opsi_dipilih",
+        "jawaban_wawancara",
+        "warga",
+        "opsi_jawaban",
+        "pertanyaan_wawancara",
+        "blok_wawancara",
+    ];
+
+    for (const nama of tabelUntukReset) {
+        await prisma.$executeRawUnsafe(`ALTER TABLE \`${nama}\` AUTO_INCREMENT = 1;`);
+        console.log(`- ${nama}: AUTO_INCREMENT direset ke 1`);
+    }
+
     console.log("\nSelesai. Tabel 'user' tidak disentuh sama sekali.");
 }
 
