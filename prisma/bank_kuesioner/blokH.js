@@ -9,7 +9,7 @@ const SKALA_MANFAAT_PROGRAM = [
 function programBerani(kode, nama, deskripsi) {
     return {
         kode,
-        variabel: `${nama} (${deskripsi})`,
+        variabel: `${nama}`,
         jenis: "PILIHAN_TUNGGAL",
         wajib: true,
         aturan: null,
@@ -42,7 +42,7 @@ export const BLOK_H = {
             variabel: "Dari seluruh Program 9 Berani, mana yang paling sulit diakses?",
             jenis: "TEKS",
             wajib: true,
-            aturan: "Isi nama program (mis. 'Berani Kerja')",
+            aturan: "Isi nama program (mis. 'Berani Sehat')",
         },
         {
             kode: "H11a",
