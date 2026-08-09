@@ -18,7 +18,14 @@ router.post(
 router.get("/dashboard", authenticate, authorize("ENUMERATOR"), asyncHandler(ctrl.getDashboard));
 router.post("/warga", authenticate, authorize("ENUMERATOR"), asyncHandler(ctrl.createWargaBaru));
 router.get("/warga", authenticate, authorize("ENUMERATOR"), asyncHandler(ctrl.listTugasWarga));
-router.post("/warga/:id/kendala",authenticate,authorize("ENUMERATOR"),asyncHandler(ctrl.reportKendalaSurvei));
+router.post(
+    "/warga/:id/kendala",
+    authenticate,
+    authorize("ENUMERATOR"),
+    uploadFoto.single("fotoKendala"),
+    asyncHandler(ctrl.reportKendalaSurvei)
+);
+
 router.get("/warga/:id", authenticate, authorize("ENUMERATOR"), asyncHandler(ctrl.getTugasWargaDetail));
 
 router.get("/instrumen", authenticate, authorize("ENUMERATOR"), asyncHandler(ctrl.getInstrumen));

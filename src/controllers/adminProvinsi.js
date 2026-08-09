@@ -178,7 +178,7 @@ async function analyzeRows(mappedRows) {
                 const asal = firstOccurrence[dbData.nik];
                 const iniBarisAsli = asal?.rowNumber === rowNumber;
                 duplikatDari = iniBarisAsli
-                    ? null 
+                    ? null
                     : {
                         sumber: "FILE",
                         baris: asal?.rowNumber,
@@ -364,8 +364,11 @@ export async function listWarga(req, res) {
                 desaKelurahan: true,
                 tanggalLahir: true,
                 desilTerbaru: true,
-                kendalaSurvei: true,
                 statusWawancara: true,
+                kendalaSurvei: {
+                    orderBy: { createdAt: "desc" },
+                    select: { id: true, keterangan: true, foto: true, createdAt: true },
+                },
             },
             skip: (Number(page) - 1) * Number(limit),
             take: Number(limit),
@@ -387,7 +390,14 @@ export async function listWarga(req, res) {
         usia: hitungUsia(w.tanggalLahir),
         desilAwal: formatDesilLabel(w.desilTerbaru),
         statusLabel: STATUS_LABEL[w.statusWawancara] ?? w.statusWawancara,
-        kendalaSurvei: w.kendalaSurvei,
+        kendalaTerakhir: w.kendalaSurvei[0]
+            ? {
+                id: w.kendalaSurvei[0].id,
+                keterangan: w.kendalaSurvei[0].keterangan,
+                foto: w.kendalaSurvei[0].foto ? `/uploads/${w.kendalaSurvei[0].foto}` : null,
+                createdAt: w.kendalaSurvei[0].createdAt,
+            }
+            : null,
     }));
 
     return success(res, {
@@ -411,6 +421,7 @@ export async function getWargaDetail(req, res) {
         where: { id },
         include: {
             diwawancaraOleh: { select: { nama: true } },
+            kendalaSurvei: { orderBy: { createdAt: "asc" } },
         },
     });
 
@@ -431,6 +442,12 @@ export async function getWargaDetail(req, res) {
         statusLabel: STATUS_LABEL[warga.statusWawancara] ?? warga.statusWawancara,
         keteranganValidasi: warga.keteranganValidasi,
         surveyor: warga.diwawancaraOleh?.nama ?? null,
+        kendalaSurvei: warga.kendalaSurvei.map((k) => ({
+            id: k.id,
+            keterangan: k.keterangan,
+            foto: k.foto ? `/uploads/${k.foto}` : null,
+            createdAt: k.createdAt,
+        })),
     });
 }
 

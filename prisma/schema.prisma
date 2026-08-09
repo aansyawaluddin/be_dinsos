@@ -66,6 +66,7 @@ model User {
 
   uploadedWarga     Warga[]
   wargaDiwawancarai Warga[] @relation("WawancaraOleh")
+  kendalaDilaporkan KendalaSurvei[]
 
   @@index([role])
   @@index([kabupatenKota])
@@ -97,7 +98,6 @@ model Warga {
   bansosSembako             String?
 
   statusWawancara   StatusWawancara @default(BELUM_DIWAWANCARA)
-  kendalaSurvei     String?
   keteranganValidasi    String?
   tanggalWawancara  DateTime?
   diwawancaraOlehId Int?
@@ -118,10 +118,25 @@ model Warga {
   createdBy       User? @relation(fields: [createdById], references: [id])
   diwawancaraOleh User? @relation("WawancaraOleh", fields: [diwawancaraOlehId], references: [id])
   jawabanWawancara JawabanWawancara[]
+  kendalaSurvei    KendalaSurvei[]
 
   @@index([kabupatenKota])
   @@index([statusWawancara])
   @@map("warga")
+}
+
+model KendalaSurvei {
+  id           Int      @id @default(autoincrement())
+  wargaId      Int
+  keterangan   String
+  foto         String?
+  createdAt    DateTime @default(now())
+  reportedById Int?
+
+  warga      Warga @relation(fields: [wargaId], references: [id])
+  reportedBy User? @relation(fields: [reportedById], references: [id])
+
+  @@map("kendala_survei")
 }
 
 model BlokWawancara {

@@ -23,6 +23,7 @@ const BULAN_INDONESIA = [
 ];
 
 const UPLOAD_ROOT = path.join(process.cwd(), "uploads");
+const MAKS_KENDALA = 2;
 
 function formatTanggalIndonesia(date) {
     const d = date instanceof Date ? date : new Date(date);
@@ -254,8 +255,11 @@ export async function listTugasWarga(req, res) {
             nik: true,
             nama: true,
             statusWawancara: true,
-            kendalaSurvei: true,
             keteranganValidasi: true,
+            kendalaSurvei: {
+                orderBy: { createdAt: "desc" },
+                select: { id: true, keterangan: true, foto: true, createdAt: true },
+            },
         },
         orderBy: { id: "asc" },
     });
@@ -265,9 +269,16 @@ export async function listTugasWarga(req, res) {
         nik: w.nik,
         nama: w.nama,
         inisial: getInitials(w.nama),
-        kendalaSurvei: w.kendalaSurvei,
         statusLabel: STATUS_LABEL[w.statusWawancara] ?? w.statusWawancara,
         keteranganValidasi: w.keteranganValidasi,
+        kendalaTerakhir: w.kendalaSurvei[0]
+            ? {
+                id: w.kendalaSurvei[0].id,
+                keterangan: w.kendalaSurvei[0].keterangan,
+                foto: w.kendalaSurvei[0].foto ? `/uploads/${w.kendalaSurvei[0].foto}` : null,
+                createdAt: w.kendalaSurvei[0].createdAt,
+            }
+            : null,
     }));
 
     return success(res, { items, total: items.length });
@@ -277,12 +288,18 @@ export async function reportKendalaSurvei(req, res) {
     const surveyorId = req.user.id;
     const id = Number(req.params.id);
     const { kendalaSurvei } = req.body;
+    const fotoFile = req.file;
 
     if (!Number.isInteger(id) || id <= 0) {
+        unlinkSafe(fotoFile?.path);
         return error(res, "ID warga tidak valid", 400);
     }
     if (!kendalaSurvei || kendalaSurvei.trim() === "") {
+        unlinkSafe(fotoFile?.path);
         return error(res, "Keterangan kendala wajib diisi", 400);
+    }
+    if (!fotoFile) {
+        return error(res, "Foto kendala wajib diupload", 400);
     }
 
     const [surveyor, warga] = await Promise.all([
@@ -291,6 +308,7 @@ export async function reportKendalaSurvei(req, res) {
     ]);
 
     if (!warga) {
+        unlinkSafe(fotoFile.path);
         return error(res, "Data warga tidak ditemukan", 404);
     }
     if (
@@ -299,23 +317,39 @@ export async function reportKendalaSurvei(req, res) {
         warga.kecamatan !== surveyor.kecamatanTugas ||
         warga.desaKelurahan !== surveyor.kelurahanTugas
     ) {
+        unlinkSafe(fotoFile.path);
         return error(res, "Warga ini di luar wilayah tugas Anda", 403);
     }
 
-    const updated = await prisma.warga.update({
-        where: { id },
+    const jumlahKendala = await prisma.kendalaSurvei.count({ where: { wargaId: id } });
+    if (jumlahKendala >= MAKS_KENDALA) {
+        unlinkSafe(fotoFile.path);
+        return error(
+            res,
+            `Kendala survei untuk warga ini sudah dilaporkan maksimal ${MAKS_KENDALA} kali`,
+            400
+        );
+    }
+
+    const fotoPathBaru = path.relative(UPLOAD_ROOT, fotoFile.path);
+
+    const kendalaBaru = await prisma.kendalaSurvei.create({
         data: {
-            kendalaSurvei: kendalaSurvei.trim(),
+            wargaId: id,
+            keterangan: kendalaSurvei.trim(),
+            foto: fotoPathBaru,
+            reportedById: surveyorId,
         },
     });
 
     return success(
         res,
         {
-            id: updated.id,
-            nama: updated.nama,
-            statusWawancara: updated.statusWawancara,
-            kendalaSurvei: updated.kendalaSurvei,
+            id: kendalaBaru.id,
+            keterangan: kendalaBaru.keterangan,
+            foto: `/uploads/${kendalaBaru.foto}`,
+            createdAt: kendalaBaru.createdAt,
+            sisaPelaporanKendala: MAKS_KENDALA - (jumlahKendala + 1),
         },
         "Kendala survei berhasil dilaporkan"
     );
@@ -329,7 +363,12 @@ export async function getTugasWargaDetail(req, res) {
 
     const [surveyor, warga] = await Promise.all([
         getSurveyorRegion(req.user.id),
-        prisma.warga.findUnique({ where: { id } }),
+        prisma.warga.findUnique({
+            where: { id },
+            include: {
+                kendalaSurvei: { orderBy: { createdAt: "asc" } },
+            },
+        }),
     ]);
 
     if (!warga) {
@@ -356,9 +395,15 @@ export async function getTugasWargaDetail(req, res) {
         rtRw: formatRtRw(warga.rt, warga.rw),
         usia: hitungUsia(warga.tanggalLahir),
         posisiDalamKeluarga: warga.hubunganKeluarga,
-        kendalaSurvei: warga.kendalaSurvei,
         keteranganValidasi: warga.keteranganValidasi,
         statusLabel: STATUS_LABEL[warga.statusWawancara] ?? warga.statusWawancara,
+        kendalaSurvei: warga.kendalaSurvei.map((k) => ({
+            id: k.id,
+            keterangan: k.keterangan,
+            foto: k.foto ? `/uploads/${k.foto}` : null,
+            createdAt: k.createdAt,
+        })),
+        sisaPelaporanKendala: Math.max(0, MAKS_KENDALA - warga.kendalaSurvei.length),
     });
 }
 
