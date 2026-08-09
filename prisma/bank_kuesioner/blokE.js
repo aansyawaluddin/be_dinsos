@@ -66,10 +66,11 @@ export const BLOK_E = {
             wajib: true,
             aturan: null,
             opsi: [
-                { kode: "1", label: "1 kamar" },
-                { kode: "2", label: "2 kamar" },
-                { kode: "3", label: "3 kamar" },
-                { kode: "4", label: ">= 4 kamar" },
+                { kode: "1", label: "Tidak Ada Kamar" },
+                { kode: "2", label: "1 kamar" },
+                { kode: "3", label: "2 kamar" },
+                { kode: "4", label: "3 kamar" },
+                { kode: "5", label: ">= 4 kamar" },
             ],
         },
         {

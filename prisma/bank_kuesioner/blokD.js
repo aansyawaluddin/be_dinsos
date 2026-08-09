@@ -31,7 +31,7 @@ export const BLOK_D = {
                 { kode: "3", label: "Berusaha Dibantu Buruh Tetap Dan Dibayar" },
                 { kode: "4", label: "Buruh/Karyawan/Pegawai" },
                 { kode: "5", label: "Pekerja Bebas" },
-                { kode: "6", label: "Pekerja Keluarga" },
+                { kode: "6", label: "Lainnya" },
             ],
         },
         {
