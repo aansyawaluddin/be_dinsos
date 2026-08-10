@@ -55,7 +55,7 @@ export const BLOK_B = {
             variabel: "Jika ada anak tidak bersekolah, apa alasan utamanya?",
             jenis: "MULTI_PILIHAN",
             wajib: false,
-            aturan: "Pilih maksimal 2; hanya relevan jika B3 menunjukkan ada anak tidak bersekolah",
+            aturan: "Pilih maksimal 2; hanya relevan jika B3 menunjukkan tidak bersekolah",
             opsi: [
                 { kode: "1", label: "Biaya tidak mampu" },
                 { kode: "2", label: "Sekolah terlalu jauh" },

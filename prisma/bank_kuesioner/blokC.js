@@ -5,7 +5,7 @@ export const BLOK_C = {
         {
             kode: "C1",
             variabel: "Apakah anggota Keluarga memiliki jaminan kesehatan?",
-            jenis: "PILIHAN_TUNGGAL",
+            jenis: "MULTI_PILIHAN",
             wajib: true,
             aturan: null,
             opsi: [

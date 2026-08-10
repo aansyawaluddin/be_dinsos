@@ -69,10 +69,10 @@ export const BLOK_L = {
         },
         {
             kode: "L4a",
-            variabel: "Sebutkan kendala lainnya",
+            variabel: "Sebutkan kendala lainnya/Catatan",
             jenis: "TEKS",
             wajib: false,
-            aturan: "Diisi hanya jika L4 memuat opsi '16'",
+            aturan: "",
         },
 
         {
