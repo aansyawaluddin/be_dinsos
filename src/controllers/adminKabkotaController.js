@@ -175,6 +175,8 @@ export async function getHasilWawancara(req, res) {
             fotoRumah: true,
             tandaTanganResponden: true,
             tandaTanganEnumerator: true,
+            fotoKtp: true,
+            fotoKk: true,
         },
     });
 
@@ -197,13 +199,22 @@ export async function getHasilWawancara(req, res) {
         ],
     });
 
-    const ringkasanJawaban = jawabanList.map((j) => ({
-        kode: j.pertanyaan.kode,
-        pertanyaan: j.pertanyaan.variabel,
-        jawaban: j.opsiDipilih.length > 0
-            ? j.opsiDipilih.map((od) => od.opsi.label).join(", ")
-            : (j.nilaiTeks ?? "-"),
-    }));
+    const ringkasanJawaban = jawabanList.map((j) => {
+        const item = {
+            kode: j.pertanyaan.kode,
+            pertanyaan: j.pertanyaan.variabel,
+            jawaban: j.opsiDipilih.length > 0
+                ? j.opsiDipilih.map((od) => od.opsi.label).join(", ")
+                : (j.nilaiTeks ?? "-"),
+        };
+
+        if (j.pertanyaan.kode === "A4a") {
+            item.fotoKtp = warga.fotoKtp ? `/uploads/${warga.fotoKtp}` : null;
+            item.fotoKk = warga.fotoKk ? `/uploads/${warga.fotoKk}` : null;
+        }
+
+        return item;
+    });
 
     return success(res, {
         nik: warga.nik,

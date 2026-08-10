@@ -19,6 +19,17 @@ export const BLOK_A = {
             aturan: null,
         },
         {
+            kode: "A4a",
+            variabel: "Apakah data A1 - A4 (Nama KK, NIK, Nomor KK, Alamat) sudah sesuai dengan dokumen kependudukan?",
+            jenis: "PILIHAN_TUNGGAL",
+            wajib: true,
+            aturan: "Jika 'Tidak sesuai', wajib upload foto KTP dan foto Kartu Keluarga (KK)",
+            opsi: [
+                { kode: "1", label: "Ya, sudah sesuai" },
+                { kode: "2", label: "Tidak sesuai" },
+            ],
+        },
+        {
             kode: "A5",
             variabel: "Status kepesertaan dalam DTSEN",
             jenis: "PILIHAN_TUNGGAL",

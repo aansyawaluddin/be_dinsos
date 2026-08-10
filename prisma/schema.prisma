@@ -108,6 +108,8 @@ model Warga {
   longitude         Float?
   fotoDokumentasi   String?
   fotoRumah         String?
+  fotoKtp           String?
+  fotoKk            String?
   tandaTanganResponden   String?
   tandaTanganEnumerator  String?
 

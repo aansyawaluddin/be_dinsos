@@ -479,8 +479,10 @@ export async function submitWawancara(req, res) {
     const fotoRumahFile = req.files?.fotoRumah?.[0];
     const ttdRespondenFile = req.files?.tandaTanganResponden?.[0];
     const ttdEnumeratorFile = req.files?.tandaTanganEnumerator?.[0];
+    const fotoKtpFile = req.files?.fotoKtp?.[0];
+    const fotoKkFile = req.files?.fotoKk?.[0];
 
-    const semuaFileUploaded = [fotoFile, fotoRumahFile, ttdRespondenFile, ttdEnumeratorFile];
+    const semuaFileUploaded = [fotoFile, fotoRumahFile, ttdRespondenFile, ttdEnumeratorFile, fotoKtpFile, fotoKkFile];
     function unlinkSemuaFile() {
         semuaFileUploaded.forEach((f) => unlinkSafe(f?.path));
     }
@@ -619,6 +621,14 @@ export async function submitWawancara(req, res) {
         });
     }
 
+    const jawabanA4a = jawaban["A4a"];
+    const dataTidakSesuai = jawabanA4a === "2" || (Array.isArray(jawabanA4a) && jawabanA4a.includes("2"));
+
+    if (dataTidakSesuai) {
+        if (!fotoKtpFile) errors.push("Foto KTP wajib diupload karena data A1-A4 tidak sesuai");
+        if (!fotoKkFile) errors.push("Foto Kartu Keluarga (KK) wajib diupload karena data A1-A4 tidak sesuai");
+    }
+
     if (errors.length > 0) {
         unlinkSemuaFile();
         return error(res, "Jawaban tidak valid", 400, errors);
@@ -669,6 +679,8 @@ export async function submitWawancara(req, res) {
     const fotoRumahPathBaru = path.relative(UPLOAD_ROOT, fotoRumahFile.path);
     const ttdRespondenPathBaru = path.relative(UPLOAD_ROOT, ttdRespondenFile.path);
     const ttdEnumeratorPathBaru = path.relative(UPLOAD_ROOT, ttdEnumeratorFile.path);
+    const fotoKtpPathBaru = fotoKtpFile ? path.relative(UPLOAD_ROOT, fotoKtpFile.path) : null;
+    const fotoKkPathBaru = fotoKkFile ? path.relative(UPLOAD_ROOT, fotoKkFile.path) : null;
 
     const updated = await prisma.warga.update({
         where: { id },
@@ -683,6 +695,8 @@ export async function submitWawancara(req, res) {
             tandaTanganEnumerator: ttdEnumeratorPathBaru,
             ...(hasLatitude ? { latitude: Number(latitude) } : {}),
             ...(hasLongitude ? { longitude: Number(longitude) } : {}),
+            ...(fotoKtpPathBaru ? { fotoKtp: fotoKtpPathBaru } : {}),
+            ...(fotoKkPathBaru ? { fotoKk: fotoKkPathBaru } : {}),
         },
     });
 
@@ -698,6 +712,12 @@ export async function submitWawancara(req, res) {
     if (warga.tandaTanganEnumerator && warga.tandaTanganEnumerator !== ttdEnumeratorPathBaru) {
         unlinkSafe(path.join(UPLOAD_ROOT, warga.tandaTanganEnumerator));
     }
+    if (fotoKtpPathBaru && warga.fotoKtp && warga.fotoKtp !== fotoKtpPathBaru) {
+        unlinkSafe(path.join(UPLOAD_ROOT, warga.fotoKtp));
+    }
+    if (fotoKkPathBaru && warga.fotoKk && warga.fotoKk !== fotoKkPathBaru) {
+        unlinkSafe(path.join(UPLOAD_ROOT, warga.fotoKk));
+    }
 
     return success(
         res,
@@ -710,6 +730,8 @@ export async function submitWawancara(req, res) {
             fotoRumah: updated.fotoRumah,
             tandaTanganResponden: updated.tandaTanganResponden,
             tandaTanganEnumerator: updated.tandaTanganEnumerator,
+            fotoKtp: updated.fotoKtp,
+            fotoKk: updated.fotoKk,
             latitude: updated.latitude,
             longitude: updated.longitude,
         },
@@ -738,6 +760,8 @@ export async function getHasilWawancara(req, res) {
                 fotoRumah: true,
                 tandaTanganResponden: true,
                 tandaTanganEnumerator: true,
+                fotoKtp: true,
+                fotoKk: true,
             },
         }),
     ]);
@@ -766,14 +790,23 @@ export async function getHasilWawancara(req, res) {
         ],
     });
 
-    const ringkasanJawaban = jawabanList.map((j) => ({
-        kode: j.pertanyaan.kode,
-        pertanyaan: j.pertanyaan.variabel,
-        jawaban:
-            j.opsiDipilih.length > 0
-                ? j.opsiDipilih.map((od) => od.opsi.label).join(", ")
-                : j.nilaiTeks ?? "-",
-    }));
+    const ringkasanJawaban = jawabanList.map((j) => {
+        const item = {
+            kode: j.pertanyaan.kode,
+            pertanyaan: j.pertanyaan.variabel,
+            jawaban:
+                j.opsiDipilih.length > 0
+                    ? j.opsiDipilih.map((od) => od.opsi.label).join(", ")
+                    : j.nilaiTeks ?? "-",
+        };
+
+        if (j.pertanyaan.kode === "A4a") {
+            item.fotoKtp = warga.fotoKtp ? `/uploads/${warga.fotoKtp}` : null;
+            item.fotoKk = warga.fotoKk ? `/uploads/${warga.fotoKk}` : null;
+        }
+
+        return item;
+    });
 
     return success(res, {
         nik: warga.nik,

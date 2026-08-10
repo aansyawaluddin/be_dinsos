@@ -39,6 +39,8 @@ router.post(
         { name: "fotoRumah", maxCount: 1 },
         { name: "tandaTanganResponden", maxCount: 1 },
         { name: "tandaTanganEnumerator", maxCount: 1 },
+        { name: "fotoKtp", maxCount: 1 },
+        { name: "fotoKk", maxCount: 1 },
     ]),
     asyncHandler(ctrl.submitWawancara)
 );
