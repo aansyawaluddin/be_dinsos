@@ -136,13 +136,11 @@ const KABUPATEN_ENUM_VALUES = Object.keys(KABUPATEN_LABEL);
 export function resolveKabupatenKota(value) {
     if (!value) return null;
     const cleaned = String(value).trim();
-    const asEnum = cleaned.toUpperCase().replace(/\s+/g, "_");
+    const asEnum = cleaned.toUpperCase().replace(/[\s-]+/g, "_");
     if (KABUPATEN_ENUM_VALUES.includes(asEnum)) return asEnum;
     return mapKabupaten(cleaned);
 }
 
-// Titik tengah (ibu kota kabupaten/kota) buat plotting di peta GIS.
-// Koordinat perkiraan buat penempatan titik di peta, bukan batas wilayah presisi survei.
 const KABUPATEN_COORDINATES = {
     KOTA_PALU: { latitude: -0.8917, longitude: 119.8707 },
     DONGGALA: { latitude: -0.6944, longitude: 119.7306 },

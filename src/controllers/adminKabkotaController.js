@@ -8,6 +8,7 @@ import { success, error } from "../utils/response.js";
 import {
     mapKabupaten,
     mapKabupatenLabel,
+    resolveKabupatenKota,
     mapJenisKelamin,
     mapJenisKelaminLabel,
     parseTanggalLahir,
@@ -590,7 +591,7 @@ function readAndMapRows(filePath, kabupatenKotaAdmin) {
 
         rawRows.forEach((row, idx) => {
             const rowNumber = headerRowIdx + 2 + idx;
-            const kabupatenLabel = clean(row["KABUPATEN"]);
+            const kabupatenKotaExcel = resolveKabupatenKota(row["KABUPATEN"]);
             const kabupatenKotaExcel = mapKabupaten(row["KABUPATEN"]);
             const kecamatan = clean(row["KECAMATAN"]);
             const desaKelurahan = clean(row["DESA_KELURAHAN"]);

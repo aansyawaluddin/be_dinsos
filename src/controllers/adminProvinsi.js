@@ -61,7 +61,7 @@ function readAndMapRows(filePath) {
         rawRows.forEach((row, idx) => {
             const rowNumber = headerRowIdx + 2 + idx;
             const kabupatenLabel = clean(row["KABUPATEN"]);
-            const kabupatenKota = mapKabupaten(row["KABUPATEN"]);
+            const kabupatenKota = resolveKabupatenKota(row["KABUPATEN"]);
             const kecamatan = clean(row["KECAMATAN"]);
             const desaKelurahan = clean(row["DESA_KELURAHAN"]);
             const nomorKK = clean(row["nomor kartu keluarga"]);
