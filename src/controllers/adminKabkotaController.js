@@ -592,6 +592,7 @@ function readAndMapRows(filePath, kabupatenKotaAdmin) {
         rawRows.forEach((row, idx) => {
             const rowNumber = headerRowIdx + 2 + idx;
             const kabupatenKotaExcel = resolveKabupatenKota(row["KABUPATEN"]);
+            const kabupatenLabel = clean(row["KABUPATEN"]);
             const kecamatan = clean(row["KECAMATAN"]);
             const desaKelurahan = clean(row["DESA_KELURAHAN"]);
             const nomorKK = clean(row["nomor kartu keluarga"]);
