@@ -50,10 +50,22 @@ export function parseTanggalLahir(value) {
     if (!value) return null;
     if (value instanceof Date) return value;
     const str = String(value).trim();
-    const match = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-    if (!match) return null;
-    const [, day, month, year] = match;
-    return new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+
+    // Format: DD/MM/YYYY (boleh ada jam di belakang, mis. "22/11/1985 00:00:00")
+    let match = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (match) {
+        const [, day, month, year] = match;
+        return new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+    }
+
+    // Format: YYYY-MM-DD (boleh ada jam di belakang, mis. "1980-05-15 00:00:00")
+    match = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (match) {
+        const [, year, month, day] = match;
+        return new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+    }
+
+    return null;
 }
 
 // Untuk tampilan preview: Date -> "dd-mm-yyyy"
