@@ -827,6 +827,33 @@ export async function listSurveyor(req, res) {
         : [];
     const countMap = Object.fromEntries(counts.map((c) => [c.diwawancaraOlehId, c._count._all]));
 
+    const wilayahCombos = [];
+    const seenWilayah = new Set();
+    for (const s of surveyors) {
+        if (!s.kabupatenKota || !s.kecamatanTugas || !s.kelurahanTugas) continue;
+        const key = `${s.kabupatenKota}|${s.kecamatanTugas}|${s.kelurahanTugas}`;
+        if (seenWilayah.has(key)) continue;
+        seenWilayah.add(key);
+        wilayahCombos.push({
+            kabupatenKota: s.kabupatenKota,
+            kecamatan: s.kecamatanTugas,
+            desaKelurahan: s.kelurahanTugas,
+        });
+    }
+    const wargaTugasGroups = wilayahCombos.length
+        ? await prisma.warga.groupBy({
+            by: ["kabupatenKota", "kecamatan", "desaKelurahan"],
+            where: { OR: wilayahCombos },
+            _count: { _all: true },
+        })
+        : [];
+    const wargaTugasMap = new Map(
+        wargaTugasGroups.map((g) => [
+            `${g.kabupatenKota}|${g.kecamatan}|${g.desaKelurahan}`,
+            g._count._all,
+        ])
+    );
+
     const items = surveyors.map((s) => ({
         id: s.id,
         nama: s.nama,
@@ -840,6 +867,10 @@ export async function listSurveyor(req, res) {
         aktif: s.aktif,
         statusLabel: s.aktif ? "Aktif" : "Nonaktif",
         totalSurvei: countMap[s.id] || 0,
+        totalWargaTugas:
+            s.kabupatenKota && s.kecamatanTugas && s.kelurahanTugas
+                ? wargaTugasMap.get(`${s.kabupatenKota}|${s.kecamatanTugas}|${s.kelurahanTugas}`) || 0
+                : 0,
     }));
 
     return success(res, {
