@@ -79,6 +79,19 @@ export function formatTanggalLahir(value) {
     return `${dd}-${mm}-${yyyy}`;
 }
 
+// Untuk export: DateTime (timestamp asli, punya jam) -> "dd-mm-yyyy HH:MM"
+export function formatTanggalWawancara(value) {
+    if (!value) return null;
+    const d = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(d.getTime())) return null;
+    const dd = String(d.getDate()).padStart(2, "0");
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const yyyy = d.getFullYear();
+    const hh = String(d.getHours()).padStart(2, "0");
+    const min = String(d.getMinutes()).padStart(2, "0");
+    return `${dd}-${mm}-${yyyy} ${hh}:${min}`;
+}
+
 // "TIDAK" / "TIDAK (...)" -> "Tidak", selain itu (mis. "YA (PBI JKN...)", "KELUARGA (PKH...)") -> "Ya"
 export function statusBansos(value) {
     if (!value) return null;

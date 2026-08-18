@@ -13,6 +13,7 @@ import {
     mapJenisKelaminLabel,
     parseTanggalLahir,
     formatTanggalLahir,
+    formatTanggalWawancara,
     statusBansos,
     extractDesil,
     getInitials,
@@ -843,6 +844,8 @@ async function getDataSurveiForExport(kabupatenKota) {
             select: {
                 nik: true,
                 nama: true,
+                tanggalWawancara: true,
+                diwawancaraOleh: { select: { nama: true } },
                 jawabanWawancara: {
                     include: {
                         pertanyaan: true,
@@ -865,7 +868,13 @@ async function getDataSurveiForExport(kabupatenKota) {
                 ? j.opsiDipilih.map((od) => od.opsi.label).join(", ")
                 : (j.nilaiTeks ?? "-");
         });
-        return { nik: w.nik, nama: w.nama, jawabanMap };
+        return {
+            nik: w.nik,
+            nama: w.nama,
+            namaEnumerator: w.diwawancaraOleh?.nama ?? "-",
+            tanggalWawancara: formatTanggalWawancara(w.tanggalWawancara) ?? "-",
+            jawabanMap,
+        };
     });
 
     return { rows, semuaPertanyaan };
@@ -881,15 +890,17 @@ export async function exportExcel(req, res) {
         return error(res, "Belum ada data warga yang sudah disurvei untuk wilayah ini", 404);
     }
 
-    const headers = ["NIK", "Nama", ...semuaPertanyaan.map((p) => `${p.kode} - ${p.variabel}`)];
+    const headers = ["Nama Enumerator", "Tanggal Wawancara", "NIK", "Nama", ...semuaPertanyaan.map((p) => `${p.kode} - ${p.variabel}`)];
     const dataRows = rows.map((r) => [
+        r.namaEnumerator,
+        r.tanggalWawancara,
         r.nik,
         r.nama,
         ...semuaPertanyaan.map((p) => r.jawabanMap[p.kode] ?? "-"),
     ]);
 
     const worksheet = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
-    worksheet["!cols"] = headers.map((h, i) => ({ wch: i < 2 ? 22 : 28 }));
+    worksheet["!cols"] = headers.map((h, i) => ({ wch: i < 4 ? 22 : 28 }));
 
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Data Survei");

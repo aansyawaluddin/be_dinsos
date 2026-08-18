@@ -13,6 +13,7 @@ import {
     mapJenisKelaminLabel,
     parseTanggalLahir,
     formatTanggalLahir,
+    formatTanggalWawancara,
     statusBansos,
     extractDesil,
     getInitials,
@@ -991,6 +992,8 @@ async function getDataSurveiForExport(kabupatenKotaRaw) {
                 nik: true,
                 nama: true,
                 kabupatenKota: true,
+                tanggalWawancara: true,
+                diwawancaraOleh: { select: { nama: true } },
                 jawabanWawancara: {
                     include: {
                         pertanyaan: true,
@@ -1017,6 +1020,8 @@ async function getDataSurveiForExport(kabupatenKotaRaw) {
             nik: w.nik,
             nama: w.nama,
             kabupatenKota: mapKabupatenLabel(w.kabupatenKota) ?? w.kabupatenKota,
+            namaEnumerator: w.diwawancaraOleh?.nama ?? "-",
+            tanggalWawancara: formatTanggalWawancara(w.tanggalWawancara) ?? "-",
             jawabanMap,
         };
     });
@@ -1035,8 +1040,10 @@ export async function exportExcel(req, res) {
         return error(res, "Belum ada data warga yang sudah disurvei untuk wilayah ini", 404);
     }
 
-    const headers = ["NIK", "Nama", "Kabupaten/Kota", ...semuaPertanyaan.map((p) => `${p.kode} - ${p.variabel}`)];
+    const headers = ["Nama Enumerator", "Tanggal Wawancara", "NIK", "Nama", "Kabupaten/Kota", ...semuaPertanyaan.map((p) => `${p.kode} - ${p.variabel}`)];
     const dataRows = rows.map((r) => [
+        r.namaEnumerator,
+        r.tanggalWawancara,
         r.nik,
         r.nama,
         r.kabupatenKota,
@@ -1044,7 +1051,7 @@ export async function exportExcel(req, res) {
     ]);
 
     const worksheet = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
-    worksheet["!cols"] = headers.map((h, i) => ({ wch: i < 3 ? 22 : 28 }));
+    worksheet["!cols"] = headers.map((h, i) => ({ wch: i < 5 ? 22 : 28 }));
 
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Data Survei");
