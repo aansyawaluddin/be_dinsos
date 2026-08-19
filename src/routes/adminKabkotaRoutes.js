@@ -58,4 +58,6 @@ router.delete(
 router.get("/export/excel", authenticate, authorize("ADMIN_KABKOTA"), asyncHandler(ctrl.exportExcel));
 router.get("/export/pdf", authenticate, authorize("ADMIN_KABKOTA"), asyncHandler(ctrl.exportPdf));
 
+router.get("/export/rekap-kehadiran", authenticate, authorize("ADMIN_KABKOTA"), asyncHandler(ctrl.exportRekapKehadiran));
+
 export default router;

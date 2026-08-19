@@ -5,6 +5,7 @@ import fs from "fs";
 import prisma from "../lib/prisma.js";
 import { success, error } from "../utils/response.js";
 import { hashPassword } from "../utils/hash.js";
+import { buildRekapKehadiranWorkbook } from "../utils/rekapKehadiran.js";
 import {
     mapKabupaten,
     mapKabupatenLabel,
@@ -1192,4 +1193,43 @@ export async function exportPdf(req, res) {
     });
 
     doc.end();
+}
+
+export async function exportRekapKehadiran(req, res) {
+    const { bulan, tahun, kabupatenKota } = req.query;
+
+    const now = new Date();
+    const bulanNum = bulan ? Number(bulan) : now.getMonth() + 1;
+    const tahunNum = tahun ? Number(tahun) : now.getFullYear();
+
+    if (!Number.isInteger(bulanNum) || bulanNum < 1 || bulanNum > 12) {
+        return error(res, "Parameter bulan harus antara 1-12", 400);
+    }
+    if (!Number.isInteger(tahunNum) || tahunNum < 2000) {
+        return error(res, "Parameter tahun tidak valid", 400);
+    }
+
+    let kabupatenKotaResolved = null;
+    if (kabupatenKota) {
+        kabupatenKotaResolved = resolveKabupatenKota(kabupatenKota);
+        if (!kabupatenKotaResolved) {
+            return error(res, `Kabupaten/Kota "${kabupatenKota}" tidak dikenali`, 400);
+        }
+    }
+
+    const workbook = await buildRekapKehadiranWorkbook({
+        bulan: bulanNum,
+        tahun: tahunNum,
+        kabupatenKota: kabupatenKotaResolved,
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const namaFile = `rekap-kehadiran-${kabupatenKotaResolved || "semua-kabupaten"}-${tahunNum}-${String(bulanNum).padStart(2, "0")}-${Date.now()}.xlsx`;
+
+    res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader("Content-Disposition", `attachment; filename="${namaFile}"`);
+    return res.send(buffer);
 }
