@@ -457,36 +457,47 @@ export async function listSurveyor(req, res) {
     }
     const wargaTugasGroups = wilayahCombos.length
         ? await prisma.warga.groupBy({
-            by: ["kabupatenKota", "kecamatan", "desaKelurahan"],
+            by: ["kabupatenKota", "kecamatan", "desaKelurahan", "statusWawancara"],
             where: { OR: wilayahCombos },
             _count: { _all: true },
         })
         : [];
-    const wargaTugasMap = new Map(
-        wargaTugasGroups.map((g) => [
-            `${g.kabupatenKota}|${g.kecamatan}|${g.desaKelurahan}`,
-            g._count._all,
-        ])
-    );
+    const wargaTugasStatusMap = new Map();
+    for (const g of wargaTugasGroups) {
+        const key = `${g.kabupatenKota}|${g.kecamatan}|${g.desaKelurahan}`;
+        if (!wargaTugasStatusMap.has(key)) wargaTugasStatusMap.set(key, {});
+        wargaTugasStatusMap.get(key)[g.statusWawancara] = g._count._all;
+    }
 
-    const items = surveyors.map((s) => ({
-        id: s.id,
-        nama: s.nama,
-        username: s.username,
-        inisial: getInitials(s.nama),
-        fotoProfil: s.fotoProfil ? `/uploads/${s.fotoProfil}` : null,
-        kecamatanTugas: s.kecamatanTugas,
-        kelurahanTugas: s.kelurahanTugas,
-        kabupatenKota: s.kabupatenKota,
-        nomorHp: s.nomorHp,
-        aktif: s.aktif,
-        statusLabel: s.aktif ? "Aktif" : "Nonaktif",
-        totalSurvei: countMap[s.id] || 0,
-        totalWargaTugas: 
+    const items = surveyors.map((s) => {
+        const wilayahKey =
             s.kabupatenKota && s.kecamatanTugas && s.kelurahanTugas
-                ? wargaTugasMap.get(`${s.kabupatenKota}|${s.kecamatanTugas}|${s.kelurahanTugas}`) || 0
-                : 0,
-    }));
+                ? `${s.kabupatenKota}|${s.kecamatanTugas}|${s.kelurahanTugas}`
+                : null;
+        const statusCounts = (wilayahKey && wargaTugasStatusMap.get(wilayahKey)) || {};
+        const totalWargaTugas = Object.values(statusCounts).reduce((a, b) => a + b, 0);
+
+        return {
+            id: s.id,
+            nama: s.nama,
+            username: s.username,
+            inisial: getInitials(s.nama),
+            fotoProfil: s.fotoProfil ? `/uploads/${s.fotoProfil}` : null,
+            kecamatanTugas: s.kecamatanTugas,
+            kelurahanTugas: s.kelurahanTugas,
+            kabupatenKota: s.kabupatenKota,
+            nomorHp: s.nomorHp,
+            aktif: s.aktif,
+            statusLabel: s.aktif ? "Aktif" : "Nonaktif",
+            totalSurvei: countMap[s.id] || 0,
+            totalWargaTugas,
+            statusWargaTugas: {
+                disetujui: statusCounts.DISETUJUI || 0,
+                menungguValidasi: statusCounts.SUDAH_DIWAWANCARA || 0,
+                ditolak: statusCounts.DITOLAK || 0,
+            },
+        };
+    });
 
     return success(res, { items, total: items.length });
 }
