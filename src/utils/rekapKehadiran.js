@@ -2,10 +2,13 @@ import ExcelJS from "exceljs";
 import prisma from "../lib/prisma.js";
 
 const STATUS_SURVEY_ROWS = [
+    { key: "SURVEY_WARGA", label: "Selesai Wawancara", isTotal: true },
     { key: "SUDAH_DIWAWANCARA", label: "Menunggu Disetujui" },
     { key: "DISETUJUI", label: "Di setujui" },
     { key: "DITOLAK", label: "Ditolak" },
 ];
+
+const STATUS_KEYS_DIWAWANCARA = ["SUDAH_DIWAWANCARA", "DISETUJUI", "DITOLAK"];
 
 const FONT_NAME = "Bahnschrift";
 const HEADER_FILL = { type: "pattern", pattern: "solid", fgColor: { argb: "FFBDD7EE" } };
@@ -17,7 +20,7 @@ const BULAN_LABEL = [
     "JULI", "AGUSTUS", "SEPTEMBER", "OKTOBER", "NOVEMBER", "DESEMBER",
 ];
 
-const WITA_OFFSET_MS = 8 * 60 * 60 * 1000; 
+const WITA_OFFSET_MS = 8 * 60 * 60 * 1000;
 
 function getTanggalWita(date) {
     return new Date(date.getTime() + WITA_OFFSET_MS).getUTCDate();
@@ -62,7 +65,7 @@ export async function buildRekapKehadiranWorkbook({ bulan, tahun, kabupatenKota 
             (rekapMap[w.diwawancaraOlehId][w.statusWawancara][day] || 0) + 1;
     }
 
-    const totalKolom = 4 + jumlahHari + 1; 
+    const totalKolom = 4 + jumlahHari + 1;
 
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet("Rekap Kehadiran");
@@ -107,16 +110,29 @@ export async function buildRekapKehadiranWorkbook({ bulan, tahun, kabupatenKota 
     for (const e of enumerators) {
         no += 1;
         const startRow = currentRow;
-        for (const status of STATUS_SURVEY_ROWS) {
+        for (let idx = 0; idx < STATUS_SURVEY_ROWS.length; idx++) {
+            const status = STATUS_SURVEY_ROWS[idx];
             const r = currentRow;
-            if (status.key === "SUDAH_DIWAWANCARA") {
+            if (idx === 0) {
                 sheet.getCell(r, 1).value = no;
                 sheet.getCell(r, 2).value = e.nama;
                 sheet.getCell(r, 3).value = e.kelurahanTugas || "-";
             }
             sheet.getCell(r, 4).value = status.label;
 
-            const dayMap = rekapMap[e.id]?.[status.key] || {};
+            let dayMap;
+            if (status.isTotal) {
+                dayMap = {};
+                for (const k of STATUS_KEYS_DIWAWANCARA) {
+                    const m = rekapMap[e.id]?.[k] || {};
+                    for (const d of Object.keys(m)) {
+                        dayMap[d] = (dayMap[d] || 0) + m[d];
+                    }
+                }
+            } else {
+                dayMap = rekapMap[e.id]?.[status.key] || {};
+            }
+
             let total = 0;
             for (let d = 1; d <= jumlahHari; d++) {
                 const jumlahHariIni = dayMap[d] || 0;
@@ -127,13 +143,16 @@ export async function buildRekapKehadiranWorkbook({ bulan, tahun, kabupatenKota 
 
             for (let c = 1; c <= totalKolom; c++) {
                 const cell = sheet.getCell(r, c);
-                cell.font = { name: FONT_NAME, size: 11, bold: false };
+                cell.font = { name: FONT_NAME, size: 11, bold: !!status.isTotal };
                 cell.alignment = {
                     horizontal: c === 4 ? "left" : "center",
                     vertical: "center",
                     wrapText: c === 2 || c === 3,
                 };
                 cell.border = ALL_BORDERS;
+                if (status.isTotal && c >= 4) {
+                    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEAF1DD" } };
+                }
             }
             sheet.getRow(r).height = 35.25;
             currentRow += 1;

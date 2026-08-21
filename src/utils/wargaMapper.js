@@ -84,11 +84,12 @@ export function formatTanggalWawancara(value) {
     if (!value) return null;
     const d = value instanceof Date ? value : new Date(value);
     if (Number.isNaN(d.getTime())) return null;
-    const dd = String(d.getDate()).padStart(2, "0");
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const yyyy = d.getFullYear();
-    const hh = String(d.getHours()).padStart(2, "0");
-    const min = String(d.getMinutes()).padStart(2, "0");
+    const wita = new Date(d.getTime() + 8 * 60 * 60 * 1000);
+    const dd = String(wita.getUTCDate()).padStart(2, "0");
+    const mm = String(wita.getUTCMonth() + 1).padStart(2, "0");
+    const yyyy = wita.getUTCFullYear();
+    const hh = String(wita.getUTCHours()).padStart(2, "0");
+    const min = String(wita.getUTCMinutes()).padStart(2, "0");
     return `${dd}-${mm}-${yyyy} ${hh}:${min}`;
 }
 
