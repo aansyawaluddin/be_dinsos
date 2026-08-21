@@ -762,6 +762,8 @@ export async function getHasilWawancara(req, res) {
                 tandaTanganEnumerator: true,
                 fotoKtp: true,
                 fotoKk: true,
+                latitude: true,
+                longitude: true,
             },
         }),
     ]);
@@ -815,6 +817,8 @@ export async function getHasilWawancara(req, res) {
         fotoRumah: warga.fotoRumah ? `/uploads/${warga.fotoRumah}` : null,
         tandaTanganResponden: warga.tandaTanganResponden ? `/uploads/${warga.tandaTanganResponden}` : null,
         tandaTanganEnumerator: warga.tandaTanganEnumerator ? `/uploads/${warga.tandaTanganEnumerator}` : null,
+        latitude: warga.latitude,
+        longitude: warga.longitude,
         ringkasanJawaban,
     });
 }
