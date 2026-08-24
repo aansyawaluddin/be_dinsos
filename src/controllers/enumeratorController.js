@@ -134,6 +134,8 @@ export async function getDashboard(req, res) {
 }
 
 export async function createWargaBaru(req, res) {
+    return error(res, "Saat Ini fitur Penamaan Warga Baru belum diaktifkan", 404);
+
     const surveyorId = req.user.id;
 
     const surveyor = await getSurveyorRegion(surveyorId);
@@ -687,7 +689,7 @@ export async function submitWawancara(req, res) {
         data: {
             statusWawancara: "SUDAH_DIWAWANCARA",
             keteranganValidasi: null,
-            tanggalWawancara: new Date(),
+            ...(warga.tanggalWawancara ? {} : { tanggalWawancara: new Date() }),
             diwawancaraOlehId: surveyorId,
             fotoDokumentasi: fotoPathBaru,
             fotoRumah: fotoRumahPathBaru,
