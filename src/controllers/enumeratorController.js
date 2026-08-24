@@ -134,7 +134,7 @@ export async function getDashboard(req, res) {
 }
 
 export async function createWargaBaru(req, res) {
-    return error(res, "Saat Ini fitur Penamaan Warga Baru belum diaktifkan", 404);
+    return error(res, "Saat Ini fitur Penambahan Warga Baru belum diaktifkan", 404);
 
     const surveyorId = req.user.id;
 
