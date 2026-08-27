@@ -167,6 +167,34 @@ export function resolveKabupatenKota(value) {
     return mapKabupaten(cleaned);
 }
 
+// Status StatusWawancara yang boleh di-export (BELUM_DIWAWANCARA tidak punya jawaban, jadi tidak termasuk)
+const STATUS_VALIDASI_LABEL = {
+    SUDAH_DIWAWANCARA: "Menunggu Validasi",
+    DISETUJUI: "Sudah Divalidasi",
+    DITOLAK: "Ditolak",
+};
+
+// Alias untuk frasa manusiawi yang tidak sama persis dengan nama enum-nya
+const STATUS_VALIDASI_ALIAS = {
+    MENUNGGU_VALIDASI: "SUDAH_DIWAWANCARA",
+    SUDAH_DIVALIDASI: "DISETUJUI",
+};
+
+const STATUS_VALIDASI_ENUM_VALUES = Object.keys(STATUS_VALIDASI_LABEL);
+
+// "menunggu validasi" / "Sudah Divalidasi" / "SUDAH_DIWAWANCARA" -> enum StatusWawancara (khusus yang bisa di-export)
+export function resolveStatusValidasi(value) {
+    if (!value) return null;
+    const asEnum = String(value).trim().toUpperCase().replace(/[\s-]+/g, "_");
+    if (STATUS_VALIDASI_ENUM_VALUES.includes(asEnum)) return asEnum;
+    return STATUS_VALIDASI_ALIAS[asEnum] || null;
+}
+
+// SUDAH_DIWAWANCARA -> "Menunggu Validasi", buat nama file & pesan error
+export function mapStatusValidasiLabel(value) {
+    return STATUS_VALIDASI_LABEL[value] || null;
+}
+
 const KABUPATEN_COORDINATES = {
     KOTA_PALU: { latitude: -0.8917, longitude: 119.8707 },
     DONGGALA: { latitude: -0.6944, longitude: 119.7306 },

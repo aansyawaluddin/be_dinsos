@@ -10,6 +10,8 @@ import {
     mapKabupaten,
     mapKabupatenLabel,
     resolveKabupatenKota,
+    resolveStatusValidasi,
+    mapStatusValidasiLabel,
     mapJenisKelamin,
     mapJenisKelaminLabel,
     parseTanggalLahir,
@@ -878,8 +880,13 @@ export async function cancelUpload(req, res) {
     return success(res, null, "Upload dibatalkan");
 }
 
-async function getDataSurveiForExport(kabupatenKota) {
-    const whereWarga = { statusWawancara: "DISETUJUI", kabupatenKota };
+async function getDataSurveiForExport(kabupatenKota, statusWawancaraRaw) {
+    const statusWawancara = statusWawancaraRaw ? resolveStatusValidasi(statusWawancaraRaw) : "DISETUJUI";
+    if (!statusWawancara) {
+        return { rows: [], semuaPertanyaan: [], statusTidakDikenali: true };
+    }
+
+    const whereWarga = { statusWawancara, kabupatenKota };
 
     const [wargaList, semuaPertanyaan] = await Promise.all([
         prisma.warga.findMany({
@@ -920,17 +927,22 @@ async function getDataSurveiForExport(kabupatenKota) {
         };
     });
 
-    return { rows, semuaPertanyaan };
+    return { rows, semuaPertanyaan, statusTidakDikenali: false };
 }
 
 export async function exportExcel(req, res) {
     const kabupatenKota = requireRegion(req, res);
     if (!kabupatenKota) return;
 
-    const { rows, semuaPertanyaan } = await getDataSurveiForExport(kabupatenKota);
+    const { statusWawancara } = req.query;
+    const { rows, semuaPertanyaan, statusTidakDikenali } = await getDataSurveiForExport(kabupatenKota, statusWawancara);
 
+    if (statusTidakDikenali) {
+        return error(res, `Status "${statusWawancara}" tidak dikenali. Gunakan salah satu: Menunggu Validasi, Sudah Divalidasi, atau Ditolak`, 400);
+    }
     if (rows.length === 0) {
-        return error(res, "Belum ada data warga yang sudah disurvei untuk wilayah ini", 404);
+        const statusLabel = mapStatusValidasiLabel(statusWawancara ? resolveStatusValidasi(statusWawancara) : "DISETUJUI");
+        return error(res, `Belum ada data warga dengan status "${statusLabel}" untuk wilayah ini`, 404);
     }
 
     const headers = ["Nama Enumerator", "Tanggal Wawancara", "NIK", "Nama", ...semuaPertanyaan.map((p) => `${p.kode} - ${p.variabel}`)];
@@ -951,11 +963,12 @@ export async function exportExcel(req, res) {
     const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
 
     const labelWilayah = mapKabupatenLabel(kabupatenKota) ?? kabupatenKota;
+    const statusSlug = statusWawancara ? resolveStatusValidasi(statusWawancara).toLowerCase() : "disetujui";
     res.setHeader(
         "Content-Type",
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     );
-    res.setHeader("Content-Disposition", `attachment; filename="data-survei-${labelWilayah}-${Date.now()}.xlsx"`);
+    res.setHeader("Content-Disposition", `attachment; filename="data-survei-${statusSlug}-${labelWilayah}-${Date.now()}.xlsx"`);
     return res.send(buffer);
 }
 

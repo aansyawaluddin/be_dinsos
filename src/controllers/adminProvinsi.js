@@ -10,6 +10,8 @@ import {
     mapKabupaten,
     mapKabupatenLabel,
     resolveKabupatenKota,
+    resolveStatusValidasi,
+    mapStatusValidasiLabel,
     mapJenisKelamin,
     mapJenisKelaminLabel,
     parseTanggalLahir,
@@ -1017,8 +1019,13 @@ export async function getSebaranWilayah(req, res) {
     });
 }
 
-async function getDataSurveiForExport(kabupatenKotaRaw) {
-    const whereWarga = { statusWawancara: "DISETUJUI" };
+async function getDataSurveiForExport(kabupatenKotaRaw, statusWawancaraRaw) {
+    const statusWawancara = statusWawancaraRaw ? resolveStatusValidasi(statusWawancaraRaw) : "DISETUJUI";
+    if (!statusWawancara) {
+        return { rows: [], semuaPertanyaan: [], statusTidakDikenali: true };
+    }
+
+    const whereWarga = { statusWawancara };
 
     if (kabupatenKotaRaw) {
         const kabupatenKota = resolveKabupatenKota(kabupatenKotaRaw);
@@ -1069,18 +1076,22 @@ async function getDataSurveiForExport(kabupatenKotaRaw) {
         };
     });
 
-    return { rows, semuaPertanyaan, kabupatenTidakDikenali: false };
+    return { rows, semuaPertanyaan, kabupatenTidakDikenali: false, statusTidakDikenali: false };
 }
 
 export async function exportExcel(req, res) {
-    const { kabupatenKota } = req.query;
-    const { rows, semuaPertanyaan, kabupatenTidakDikenali } = await getDataSurveiForExport(kabupatenKota);
+    const { kabupatenKota, statusWawancara } = req.query;
+    const { rows, semuaPertanyaan, kabupatenTidakDikenali, statusTidakDikenali } = await getDataSurveiForExport(kabupatenKota, statusWawancara);
 
+    if (statusTidakDikenali) {
+        return error(res, `Status "${statusWawancara}" tidak dikenali. Gunakan salah satu: Menunggu Validasi, Sudah Divalidasi, atau Ditolak`, 400);
+    }
     if (kabupatenTidakDikenali) {
         return error(res, `Kabupaten/Kota "${kabupatenKota}" tidak dikenali`, 400);
     }
     if (rows.length === 0) {
-        return error(res, "Belum ada data warga yang sudah disurvei untuk wilayah ini", 404);
+        const statusLabel = mapStatusValidasiLabel(statusWawancara ? resolveStatusValidasi(statusWawancara) : "DISETUJUI");
+        return error(res, `Belum ada data warga dengan status "${statusLabel}" untuk wilayah ini`, 404);
     }
 
     const headers = ["Nama Enumerator", "Tanggal Wawancara", "NIK", "Nama", "Kabupaten/Kota", ...semuaPertanyaan.map((p) => `${p.kode} - ${p.variabel}`)];
@@ -1101,9 +1112,10 @@ export async function exportExcel(req, res) {
 
     const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
 
+    const statusSlug = statusWawancara ? resolveStatusValidasi(statusWawancara).toLowerCase() : "disetujui";
     const namaFile = kabupatenKota
-        ? `data-survei-${kabupatenKota}-${Date.now()}.xlsx`
-        : `data-survei-semua-kabupaten-${Date.now()}.xlsx`;
+        ? `data-survei-${statusSlug}-${kabupatenKota}-${Date.now()}.xlsx`
+        : `data-survei-${statusSlug}-semua-kabupaten-${Date.now()}.xlsx`;
 
     res.setHeader(
         "Content-Type",
