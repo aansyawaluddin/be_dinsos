@@ -1,4 +1,5 @@
 import XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
 import path from "path";
 import fs from "fs";
@@ -930,46 +931,105 @@ async function getDataSurveiForExport(kabupatenKota, statusWawancaraRaw) {
     return { rows, semuaPertanyaan, statusTidakDikenali: false };
 }
 
+async function* iterDataSurveiRows(whereWarga, batchSize = 300) {
+    let cursorId;
+    while (true) {
+        const batch = await prisma.warga.findMany({
+            where: whereWarga,
+            select: {
+                id: true,
+                nik: true,
+                nama: true,
+                tanggalWawancara: true,
+                diwawancaraOleh: { select: { nama: true } },
+                jawabanWawancara: {
+                    select: {
+                        nilaiTeks: true,
+                        pertanyaan: { select: { kode: true } },
+                        opsiDipilih: { select: { opsi: { select: { label: true } } } },
+                    },
+                },
+            },
+            orderBy: [{ nama: "asc" }, { id: "asc" }],
+            ...(cursorId ? { cursor: { id: cursorId }, skip: 1 } : {}),
+            take: batchSize,
+        });
+
+        if (batch.length === 0) return;
+
+        for (const w of batch) {
+            const jawabanMap = {};
+            w.jawabanWawancara.forEach((j) => {
+                jawabanMap[j.pertanyaan.kode] = j.opsiDipilih.length > 0
+                    ? j.opsiDipilih.map((od) => od.opsi.label).join(", ")
+                    : (j.nilaiTeks ?? "-");
+            });
+            yield {
+                nik: w.nik,
+                nama: w.nama,
+                namaEnumerator: w.diwawancaraOleh?.nama ?? "-",
+                tanggalWawancara: formatTanggalWawancara(w.tanggalWawancara) ?? "-",
+                jawabanMap,
+            };
+        }
+
+        if (batch.length < batchSize) return;
+        cursorId = batch[batch.length - 1].id;
+    }
+}
+
 export async function exportExcel(req, res) {
     const kabupatenKota = requireRegion(req, res);
     if (!kabupatenKota) return;
 
-    const { statusWawancara } = req.query;
-    const { rows, semuaPertanyaan, statusTidakDikenali } = await getDataSurveiForExport(kabupatenKota, statusWawancara);
-
-    if (statusTidakDikenali) {
-        return error(res, `Status "${statusWawancara}" tidak dikenali. Gunakan salah satu: Menunggu Validasi, Sudah Divalidasi, atau Ditolak`, 400);
+    const { statusWawancara: statusWawancaraRaw } = req.query;
+    const statusWawancara = statusWawancaraRaw ? resolveStatusValidasi(statusWawancaraRaw) : "DISETUJUI";
+    if (!statusWawancara) {
+        return error(res, `Status "${statusWawancaraRaw}" tidak dikenali. Gunakan salah satu: Menunggu Validasi, Sudah Divalidasi, atau Ditolak`, 400);
     }
-    if (rows.length === 0) {
-        const statusLabel = mapStatusValidasiLabel(statusWawancara ? resolveStatusValidasi(statusWawancara) : "DISETUJUI");
+
+    const semuaPertanyaan = await prisma.pertanyaanWawancara.findMany({
+        orderBy: [{ blok: { urutan: "asc" } }, { urutan: "asc" }],
+        select: { kode: true, variabel: true },
+    });
+
+    const rowIterator = iterDataSurveiRows({ statusWawancara, kabupatenKota });
+    const first = await rowIterator.next();
+
+    if (first.done) {
+        const statusLabel = mapStatusValidasiLabel(statusWawancara);
         return error(res, `Belum ada data warga dengan status "${statusLabel}" untuk wilayah ini`, 404);
     }
 
     const headers = ["Nama Enumerator", "Tanggal Wawancara", "NIK", "Nama", ...semuaPertanyaan.map((p) => `${p.kode} - ${p.variabel}`)];
-    const dataRows = rows.map((r) => [
-        r.namaEnumerator,
-        r.tanggalWawancara,
-        r.nik,
-        r.nama,
-        ...semuaPertanyaan.map((p) => r.jawabanMap[p.kode] ?? "-"),
-    ]);
-
-    const worksheet = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
-    worksheet["!cols"] = headers.map((h, i) => ({ wch: i < 4 ? 22 : 28 }));
-
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Data Survei");
-
-    const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
 
     const labelWilayah = mapKabupatenLabel(kabupatenKota) ?? kabupatenKota;
-    const statusSlug = statusWawancara ? resolveStatusValidasi(statusWawancara).toLowerCase() : "disetujui";
-    res.setHeader(
-        "Content-Type",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    );
+    const statusSlug = statusWawancara.toLowerCase();
+
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", `attachment; filename="data-survei-${statusSlug}-${labelWilayah}-${Date.now()}.xlsx"`);
-    return res.send(buffer);
+
+    const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({ stream: res, useStyles: false, useSharedStrings: false });
+    const worksheet = workbook.addWorksheet("Data Survei");
+    worksheet.columns = headers.map((h, i) => ({ header: h, width: i < 4 ? 22 : 28 }));
+
+    const writeRow = (r) => {
+        worksheet.addRow([
+            r.namaEnumerator,
+            r.tanggalWawancara,
+            r.nik,
+            r.nama,
+            ...semuaPertanyaan.map((p) => r.jawabanMap[p.kode] ?? "-"),
+        ]).commit();
+    };
+
+    writeRow(first.value);
+    for await (const r of rowIterator) {
+        writeRow(r);
+    }
+
+    worksheet.commit();
+    await workbook.commit();
 }
 
 function hitungLebarKolom(jumlahKolomSoal, totalWidth) {
