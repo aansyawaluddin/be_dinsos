@@ -924,7 +924,6 @@ async function* iterDataSurveiRows(whereWarga, batchSize = 300) {
             };
         }
 
-        if (batch.length < batchSize) return;
         cursorId = batch[batch.length - 1].id;
     }
 }
@@ -940,6 +939,8 @@ const STATUS_LABEL_EXPORT = {
 export async function exportExcel(req, res) {
     const kabupatenKota = requireRegion(req, res);
     if (!kabupatenKota) return;
+
+    const waktuMulaiExport = new Date(); // kunci snapshot titik waktu export
 
     const { statusWawancara: statusWawancaraRaw } = req.query;
     const isSemuaStatus = statusWawancaraRaw && SEMUA_STATUS_ALIASES.includes(String(statusWawancaraRaw).trim().toLowerCase());
@@ -961,6 +962,7 @@ export async function exportExcel(req, res) {
     const whereWarga = {
         kabupatenKota,
         statusWawancara: isSemuaStatus ? { in: STATUS_UNTUK_SEMUA } : statusWawancara,
+        createdAt: { lte: waktuMulaiExport }, // biar konsisten walau ada data baru masuk pas export jalan
     };
 
     const semuaPertanyaan = await prisma.pertanyaanWawancara.findMany({

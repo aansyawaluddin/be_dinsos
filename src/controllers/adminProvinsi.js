@@ -1019,7 +1019,7 @@ export async function getSebaranWilayah(req, res) {
     });
 }
 
-async function* iterDataSurveiRows(whereWarga, orderBy, batchSize = 300) {
+async function* iterDataSurveiRows(whereWarga, batchSize = 300) {
     let cursorId;
     while (true) {
         const batch = await prisma.warga.findMany({
@@ -1040,7 +1040,7 @@ async function* iterDataSurveiRows(whereWarga, orderBy, batchSize = 300) {
                     },
                 },
             },
-            orderBy,
+            orderBy: [{ tanggalWawancara: "asc" }, { id: "asc" }],
             ...(cursorId ? { cursor: { id: cursorId }, skip: 1 } : {}),
             take: batchSize,
         });
@@ -1065,8 +1065,19 @@ async function* iterDataSurveiRows(whereWarga, orderBy, batchSize = 300) {
             };
         }
 
-        if (batch.length < batchSize) return;
         cursorId = batch[batch.length - 1].id;
+    }
+}
+
+const KABUPATEN_KOTA_URUTAN = [
+    "KOTA_PALU", "DONGGALA", "SIGI", "PARIGI_MOUTONG", "POSO",
+    "TOJO_UNA_UNA", "MOROWALI", "MOROWALI_UTARA", "BANGGAI",
+    "BANGGAI_KEPULAUAN", "BANGGAI_LAUT", "BUOL", "TOLITOLI",
+];
+
+async function* iterSemuaKabupatenRows(whereDasar, batchSize = 300) {
+    for (const kab of KABUPATEN_KOTA_URUTAN) {
+        yield* iterDataSurveiRows({ ...whereDasar, kabupatenKota: kab }, batchSize);
     }
 }
 
@@ -1079,6 +1090,8 @@ const STATUS_LABEL_EXPORT = {
 };
 
 export async function exportExcel(req, res) {
+    const waktuMulaiExport = new Date(); 
+
     const { kabupatenKota: kabupatenKotaRaw, statusWawancara: statusWawancaraRaw } = req.query;
 
     const isSemuaStatus = statusWawancaraRaw && SEMUA_STATUS_ALIASES.includes(String(statusWawancaraRaw).trim().toLowerCase());
@@ -1105,20 +1118,20 @@ export async function exportExcel(req, res) {
         }
     }
 
-    const whereWarga = {
+    const whereDasar = {
         statusWawancara: isSemuaStatus ? { in: STATUS_UNTUK_SEMUA } : statusWawancara,
-        ...(kabupatenKota ? { kabupatenKota } : {}),
+        createdAt: { lte: waktuMulaiExport },
     };
-    const orderBy = kabupatenKota
-        ? [{ tanggalWawancara: "asc" }, { id: "asc" }]
-        : [{ kabupatenKota: "asc" }, { tanggalWawancara: "asc" }, { id: "asc" }];
 
     const semuaPertanyaan = await prisma.pertanyaanWawancara.findMany({
         orderBy: [{ blok: { urutan: "asc" } }, { urutan: "asc" }],
         select: { kode: true, variabel: true },
     });
 
-    const rowIterator = iterDataSurveiRows(whereWarga, orderBy);
+    const rowIterator = kabupatenKota
+        ? iterDataSurveiRows({ ...whereDasar, kabupatenKota })
+        : iterSemuaKabupatenRows(whereDasar);
+
     const first = await rowIterator.next();
 
     if (first.done) {
