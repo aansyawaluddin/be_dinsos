@@ -1,6 +1,5 @@
 import XLSX from "xlsx";
 import ExcelJS from "exceljs";
-import PDFDocument from "pdfkit";
 import path from "path";
 import fs from "fs";
 import { hashPassword } from "../utils/hash.js";
@@ -881,56 +880,6 @@ export async function cancelUpload(req, res) {
     return success(res, null, "Upload dibatalkan");
 }
 
-async function getDataSurveiForExport(kabupatenKota, statusWawancaraRaw) {
-    const statusWawancara = statusWawancaraRaw ? resolveStatusValidasi(statusWawancaraRaw) : "DISETUJUI";
-    if (!statusWawancara) {
-        return { rows: [], semuaPertanyaan: [], statusTidakDikenali: true };
-    }
-
-    const whereWarga = { statusWawancara, kabupatenKota };
-
-    const [wargaList, semuaPertanyaan] = await Promise.all([
-        prisma.warga.findMany({
-            where: whereWarga,
-            select: {
-                nik: true,
-                nama: true,
-                tanggalWawancara: true,
-                diwawancaraOleh: { select: { nama: true } },
-                jawabanWawancara: {
-                    include: {
-                        pertanyaan: true,
-                        opsiDipilih: { include: { opsi: true } },
-                    },
-                },
-            },
-            orderBy: { nama: "asc" },
-        }),
-        prisma.pertanyaanWawancara.findMany({
-            orderBy: [{ blok: { urutan: "asc" } }, { urutan: "asc" }],
-            select: { kode: true, variabel: true },
-        }),
-    ]);
-
-    const rows = wargaList.map((w) => {
-        const jawabanMap = {};
-        w.jawabanWawancara.forEach((j) => {
-            jawabanMap[j.pertanyaan.kode] = j.opsiDipilih.length > 0
-                ? j.opsiDipilih.map((od) => od.opsi.label).join(", ")
-                : (j.nilaiTeks ?? "-");
-        });
-        return {
-            nik: w.nik,
-            nama: w.nama,
-            namaEnumerator: w.diwawancaraOleh?.nama ?? "-",
-            tanggalWawancara: formatTanggalWawancara(w.tanggalWawancara) ?? "-",
-            jawabanMap,
-        };
-    });
-
-    return { rows, semuaPertanyaan, statusTidakDikenali: false };
-}
-
 async function* iterDataSurveiRows(whereWarga, batchSize = 300) {
     let cursorId;
     while (true) {
@@ -940,6 +889,7 @@ async function* iterDataSurveiRows(whereWarga, batchSize = 300) {
                 id: true,
                 nik: true,
                 nama: true,
+                statusWawancara: true,
                 tanggalWawancara: true,
                 diwawancaraOleh: { select: { nama: true } },
                 jawabanWawancara: {
@@ -967,6 +917,7 @@ async function* iterDataSurveiRows(whereWarga, batchSize = 300) {
             yield {
                 nik: w.nik,
                 nama: w.nama,
+                statusWawancara: w.statusWawancara,
                 namaEnumerator: w.diwawancaraOleh?.nama ?? "-",
                 tanggalWawancara: formatTanggalWawancara(w.tanggalWawancara) ?? "-",
                 jawabanMap,
@@ -978,45 +929,73 @@ async function* iterDataSurveiRows(whereWarga, batchSize = 300) {
     }
 }
 
+const SEMUA_STATUS_ALIASES = ["semua", "semua status", "semua_status", "all"];
+const STATUS_UNTUK_SEMUA = ["SUDAH_DIWAWANCARA", "DISETUJUI", "DITOLAK"];
+const STATUS_LABEL_EXPORT = {
+    SUDAH_DIWAWANCARA: "Menunggu Validasi",
+    DISETUJUI: "Disetujui",
+    DITOLAK: "Ditolak",
+};
+
 export async function exportExcel(req, res) {
     const kabupatenKota = requireRegion(req, res);
     if (!kabupatenKota) return;
 
     const { statusWawancara: statusWawancaraRaw } = req.query;
-    const statusWawancara = statusWawancaraRaw ? resolveStatusValidasi(statusWawancaraRaw) : "DISETUJUI";
-    if (!statusWawancara) {
-        return error(res, `Status "${statusWawancaraRaw}" tidak dikenali. Gunakan salah satu: Menunggu Validasi, Sudah Divalidasi, atau Ditolak`, 400);
+    const isSemuaStatus = statusWawancaraRaw && SEMUA_STATUS_ALIASES.includes(String(statusWawancaraRaw).trim().toLowerCase());
+
+    let statusWawancara;
+    if (isSemuaStatus) {
+        statusWawancara = "SEMUA";
+    } else {
+        statusWawancara = statusWawancaraRaw ? resolveStatusValidasi(statusWawancaraRaw) : "DISETUJUI";
+        if (!statusWawancara) {
+            return error(
+                res,
+                `Status "${statusWawancaraRaw}" tidak dikenali. Gunakan salah satu: Menunggu Validasi, Sudah Divalidasi, Ditolak, atau Semua Status`,
+                400
+            );
+        }
     }
+
+    const whereWarga = {
+        kabupatenKota,
+        statusWawancara: isSemuaStatus ? { in: STATUS_UNTUK_SEMUA } : statusWawancara,
+    };
 
     const semuaPertanyaan = await prisma.pertanyaanWawancara.findMany({
         orderBy: [{ blok: { urutan: "asc" } }, { urutan: "asc" }],
         select: { kode: true, variabel: true },
     });
 
-    const rowIterator = iterDataSurveiRows({ statusWawancara, kabupatenKota });
+    const rowIterator = iterDataSurveiRows(whereWarga);
     const first = await rowIterator.next();
 
     if (first.done) {
-        const statusLabel = mapStatusValidasiLabel(statusWawancara);
+        const statusLabel = isSemuaStatus ? "Semua Status" : mapStatusValidasiLabel(statusWawancara);
         return error(res, `Belum ada data warga dengan status "${statusLabel}" untuk wilayah ini`, 404);
     }
 
-    const headers = ["Nama Enumerator", "Tanggal Wawancara", "NIK", "Nama", ...semuaPertanyaan.map((p) => `${p.kode} - ${p.variabel}`)];
+    const kolomMetaAwal = ["Nama Enumerator", "Tanggal Wawancara"];
+    if (isSemuaStatus) kolomMetaAwal.push("Status");
+    kolomMetaAwal.push("NIK", "Nama");
+    const headers = [...kolomMetaAwal, ...semuaPertanyaan.map((p) => `${p.kode} - ${p.variabel}`)];
 
     const labelWilayah = mapKabupatenLabel(kabupatenKota) ?? kabupatenKota;
-    const statusSlug = statusWawancara.toLowerCase();
+    const statusSlug = isSemuaStatus ? "semua-status" : statusWawancara.toLowerCase();
 
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", `attachment; filename="data-survei-${statusSlug}-${labelWilayah}-${Date.now()}.xlsx"`);
 
     const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({ stream: res, useStyles: false, useSharedStrings: false });
     const worksheet = workbook.addWorksheet("Data Survei");
-    worksheet.columns = headers.map((h, i) => ({ header: h, width: i < 4 ? 22 : 28 }));
+    worksheet.columns = headers.map((h, i) => ({ header: h, width: i < kolomMetaAwal.length ? 22 : 28 }));
 
     const writeRow = (r) => {
         worksheet.addRow([
             r.namaEnumerator,
             r.tanggalWawancara,
+            ...(isSemuaStatus ? [STATUS_LABEL_EXPORT[r.statusWawancara] ?? r.statusWawancara] : []),
             r.nik,
             r.nama,
             ...semuaPertanyaan.map((p) => r.jawabanMap[p.kode] ?? "-"),
@@ -1030,99 +1009,6 @@ export async function exportExcel(req, res) {
 
     worksheet.commit();
     await workbook.commit();
-}
-
-function hitungLebarKolom(jumlahKolomSoal, totalWidth) {
-    const lebarNik = 85;
-    const lebarNama = 110;
-    const sisaWidth = totalWidth - lebarNik - lebarNama;
-    const lebarPerSoal = jumlahKolomSoal > 0 ? sisaWidth / jumlahKolomSoal : 0;
-    return [lebarNik, lebarNama, ...Array(jumlahKolomSoal).fill(lebarPerSoal)];
-}
-
-function potongTeks(doc, text, maxWidth) {
-    const str = String(text ?? "");
-    if (doc.widthOfString(str) <= maxWidth) return str;
-    let hasil = str;
-    while (hasil.length > 1 && doc.widthOfString(hasil + "...") > maxWidth) {
-        hasil = hasil.slice(0, -1);
-    }
-    return hasil + "...";
-}
-
-export async function exportPdf(req, res) {
-    const kabupatenKota = requireRegion(req, res);
-    if (!kabupatenKota) return;
-
-    const { rows, semuaPertanyaan } = await getDataSurveiForExport(kabupatenKota);
-
-    if (rows.length === 0) {
-        return error(res, "Belum ada data warga yang sudah disurvei untuk wilayah ini", 404);
-    }
-
-    const labelWilayah = mapKabupatenLabel(kabupatenKota) ?? kabupatenKota;
-
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="data-survei-${labelWilayah}-${Date.now()}.pdf"`);
-
-    const doc = new PDFDocument({ margin: 30, size: "A4", layout: "landscape" });
-    doc.pipe(res);
-
-    const marginLeft = doc.page.margins.left;
-    const marginTop = doc.page.margins.top;
-    const usableWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-    const batasBawah = doc.page.height - doc.page.margins.bottom;
-    const tinggiBaris = 16;
-    const paddingKolom = 4;
-
-    const headers = ["NIK", "Nama", ...semuaPertanyaan.map((p) => p.kode)];
-    const lebarKolom = hitungLebarKolom(semuaPertanyaan.length, usableWidth);
-
-    doc.fontSize(14).font("Helvetica-Bold").text(`Data Warga yang Sudah Disurvei - ${labelWilayah}`, { align: "left" });
-    doc.fontSize(8).font("Helvetica");
-    semuaPertanyaan.forEach((p) => {
-        doc.text(`${p.kode} = ${p.variabel}`);
-    });
-    doc.moveDown(0.5);
-
-    let y = doc.y;
-
-    function gambarHeader() {
-        let x = marginLeft;
-        doc.font("Helvetica-Bold").fontSize(8);
-        headers.forEach((h, i) => {
-            const teks = potongTeks(doc, h, lebarKolom[i] - paddingKolom);
-            doc.text(teks, x, y, { lineBreak: false });
-            x += lebarKolom[i];
-        });
-        y += tinggiBaris;
-        doc.moveTo(marginLeft, y - 3)
-            .lineTo(marginLeft + usableWidth, y - 3)
-            .strokeColor("#cccccc")
-            .stroke();
-        doc.font("Helvetica").fontSize(8);
-    }
-
-    gambarHeader();
-
-    rows.forEach((r) => {
-        if (y + tinggiBaris > batasBawah) {
-            doc.addPage();
-            y = marginTop;
-            gambarHeader();
-        }
-
-        let x = marginLeft;
-        const nilaiBaris = [r.nik, r.nama, ...semuaPertanyaan.map((p) => r.jawabanMap[p.kode] ?? "-")];
-        nilaiBaris.forEach((v, i) => {
-            const teks = potongTeks(doc, v, lebarKolom[i] - paddingKolom);
-            doc.text(teks, x, y, { lineBreak: false });
-            x += lebarKolom[i];
-        });
-        y += tinggiBaris;
-    });
-
-    doc.end();
 }
 
 export async function exportRekapKehadiran(req, res) {
