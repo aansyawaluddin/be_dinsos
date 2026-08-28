@@ -1147,8 +1147,8 @@ export async function exportExcel(req, res) {
 
     const whereWarga = { statusWawancara, ...(kabupatenKota ? { kabupatenKota } : {}) };
     const orderBy = kabupatenKota
-        ? [{ nama: "asc" }, { id: "asc" }]
-        : [{ kabupatenKota: "asc" }, { nama: "asc" }, { id: "asc" }];
+        ? [{ tanggalWawancara: "asc" }, { id: "asc" }]
+        : [{ kabupatenKota: "asc" }, { tanggalWawancara: "asc" }, { id: "asc" }];
 
     const semuaPertanyaan = await prisma.pertanyaanWawancara.findMany({
         orderBy: [{ blok: { urutan: "asc" } }, { urutan: "asc" }],

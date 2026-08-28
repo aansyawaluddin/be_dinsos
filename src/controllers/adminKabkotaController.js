@@ -950,7 +950,7 @@ async function* iterDataSurveiRows(whereWarga, batchSize = 300) {
                     },
                 },
             },
-            orderBy: [{ nama: "asc" }, { id: "asc" }],
+            orderBy: [{ tanggalWawancara: "asc" }, { id: "asc" }],
             ...(cursorId ? { cursor: { id: cursorId }, skip: 1 } : {}),
             take: batchSize,
         });
