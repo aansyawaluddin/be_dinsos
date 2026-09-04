@@ -130,7 +130,7 @@ model Warga {
 model KendalaSurvei {
   id           Int      @id @default(autoincrement())
   wargaId      Int
-  keterangan   String
+  keterangan   String   @db.LongText
   foto         String?
   createdAt    DateTime @default(now())
   reportedById Int?

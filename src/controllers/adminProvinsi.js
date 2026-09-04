@@ -6,6 +6,7 @@ import prisma from "../lib/prisma.js";
 import { success, error } from "../utils/response.js";
 import { hashPassword } from "../utils/hash.js";
 import { buildRekapKehadiranWorkbook } from "../utils/rekapKehadiran.js";
+import { FOTO_FIELDS_EXPORT, buildFotoUrl } from "../utils/exportFotoExcel.js";
 import {
     mapKabupaten,
     mapKabupatenLabel,
@@ -1039,6 +1040,12 @@ async function* iterDataSurveiRows(whereWarga, batchSize = 300) {
                         opsiDipilih: { select: { opsi: { select: { label: true } } } },
                     },
                 },
+                fotoDokumentasi: true,
+                fotoRumah: true,
+                fotoKtp: true,
+                fotoKk: true,
+                tandaTanganResponden: true,
+                tandaTanganEnumerator: true,
             },
             orderBy: [{ tanggalWawancara: "asc" }, { id: "asc" }],
             ...(cursorId ? { cursor: { id: cursorId }, skip: 1 } : {}),
@@ -1062,6 +1069,14 @@ async function* iterDataSurveiRows(whereWarga, batchSize = 300) {
                 namaEnumerator: w.diwawancaraOleh?.nama ?? "-",
                 tanggalWawancara: formatTanggalWawancara(w.tanggalWawancara) ?? "-",
                 jawabanMap,
+                fotoPaths: {
+                    fotoDokumentasi: w.fotoDokumentasi,
+                    fotoRumah: w.fotoRumah,
+                    fotoKtp: w.fotoKtp,
+                    fotoKk: w.fotoKk,
+                    tandaTanganResponden: w.tandaTanganResponden,
+                    tandaTanganEnumerator: w.tandaTanganEnumerator,
+                },
             };
         }
 
@@ -1081,6 +1096,11 @@ async function* iterSemuaKabupatenRows(whereDasar, batchSize = 300) {
     }
 }
 
+async function* sisipkanKembali(nilaiPertama, iteratorSisa) {
+    yield nilaiPertama;
+    yield* iteratorSisa;
+}
+
 const SEMUA_STATUS_ALIASES = ["semua", "semua status", "semua_status", "all"];
 const STATUS_UNTUK_SEMUA = ["SUDAH_DIWAWANCARA", "DISETUJUI", "DITOLAK"];
 const STATUS_LABEL_EXPORT = {
@@ -1090,7 +1110,7 @@ const STATUS_LABEL_EXPORT = {
 };
 
 export async function exportExcel(req, res) {
-    const waktuMulaiExport = new Date(); 
+    const waktuMulaiExport = new Date();
 
     const { kabupatenKota: kabupatenKotaRaw, statusWawancara: statusWawancaraRaw } = req.query;
 
@@ -1142,41 +1162,58 @@ export async function exportExcel(req, res) {
     const kolomMetaAwal = ["Nama Enumerator", "Tanggal Wawancara"];
     if (isSemuaStatus) kolomMetaAwal.push("Status");
     kolomMetaAwal.push("NIK", "Nama", "Kabupaten/Kota");
-    const headers = [...kolomMetaAwal, ...semuaPertanyaan.map((p) => `${p.kode} - ${p.variabel}`)];
+    const kolomFoto = FOTO_FIELDS_EXPORT.map((f) => f.label);
+    const headers = [...kolomMetaAwal, ...kolomFoto, ...semuaPertanyaan.map((p) => `${p.kode} - ${p.variabel}`)];
 
     const statusSlug = isSemuaStatus ? "semua-status" : statusWawancara.toLowerCase();
     const namaFile = kabupatenKota
         ? `data-survei-${statusSlug}-${kabupatenKota}-${Date.now()}.xlsx`
         : `data-survei-${statusSlug}-semua-kabupaten-${Date.now()}.xlsx`;
 
+    const semuaBaris = sisipkanKembali(first.value, rowIterator);
+
+    const buatNilaiBaris = (r) => [
+        r.namaEnumerator,
+        r.tanggalWawancara,
+        ...(isSemuaStatus ? [STATUS_LABEL_EXPORT[r.statusWawancara] ?? r.statusWawancara] : []),
+        r.nik,
+        r.nama,
+        r.kabupatenKota,
+        ...FOTO_FIELDS_EXPORT.map((f) => {
+            const url = buildFotoUrl(req, r.fotoPaths?.[f.key]);
+            return url ? { text: "Lihat Foto", hyperlink: url } : "-";
+        }),
+        ...semuaPertanyaan.map((p) => r.jawabanMap[p.kode] ?? "-"),
+    ];
+
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", `attachment; filename="${namaFile}"`);
 
-    const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({ stream: res, useStyles: false, useSharedStrings: false });
+    const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({ stream: res, useStyles: true, useSharedStrings: false });
     const worksheet = workbook.addWorksheet("Data Survei");
-    worksheet.columns = headers.map((h, i) => ({ header: h, width: i < kolomMetaAwal.length ? 22 : 28 }));
+    worksheet.columns = headers.map((h, i) => ({
+        header: h,
+        width: i < kolomMetaAwal.length ? 22 : i < kolomMetaAwal.length + kolomFoto.length ? 14 : 28,
+    }));
 
-    const writeRow = (r) => {
-        worksheet.addRow([
-            r.namaEnumerator,
-            r.tanggalWawancara,
-            ...(isSemuaStatus ? [STATUS_LABEL_EXPORT[r.statusWawancara] ?? r.statusWawancara] : []),
-            r.nik,
-            r.nama,
-            r.kabupatenKota,
-            ...semuaPertanyaan.map((p) => r.jawabanMap[p.kode] ?? "-"),
-        ]).commit();
-    };
+    const kolomFotoMulai = kolomMetaAwal.length;
+    const HYPERLINK_FONT = { color: { argb: "FF0563C1" }, underline: true };
 
-    writeRow(first.value);
-    for await (const r of rowIterator) {
-        writeRow(r);
+    for await (const r of semuaBaris) {
+        const nilaiBaris = buatNilaiBaris(r);
+        const row = worksheet.addRow(nilaiBaris);
+        for (let i = 0; i < kolomFoto.length; i++) {
+            const nilaiSel = nilaiBaris[kolomFotoMulai + i];
+            if (nilaiSel && typeof nilaiSel === "object" && nilaiSel.hyperlink) {
+                row.getCell(kolomFotoMulai + i + 1).font = HYPERLINK_FONT;
+            }
+        }
+        row.commit();
     }
 
     worksheet.commit();
     await workbook.commit();
 }
-
 export async function exportRekapKehadiran(req, res) {
     const { bulan, tahun, kabupatenKota } = req.query;
 
