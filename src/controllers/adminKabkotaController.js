@@ -35,6 +35,7 @@ const STATUS_LABEL = {
     SUDAH_DIWAWANCARA: "Menunggu Validasi",
     DISETUJUI: "Disetujui",
     DITOLAK: "Ditolak",
+    TIDAK_DAPAT_DIWAWANCARA: "Tidak Dapat Diwawancara",
 };
 
 function requireRegion(req, res) {
@@ -261,7 +262,7 @@ export async function validasiWawancara(req, res) {
         return error(res, "Warga ini di luar wilayah tugas Anda", 403);
     }
 
-    if (warga.statusWawancara === "BELUM_DIWAWANCARA") {
+    if (["BELUM_DIWAWANCARA", "TIDAK_DAPAT_DIWAWANCARA"].includes(warga.statusWawancara)) {
         return error(res, "Warga belum disurvei, tidak dapat divalidasi", 400);
     }
 
@@ -328,6 +329,7 @@ export async function getCharts(req, res) {
         { label: "Sudah Disurvei", jumlah: statusCountMap.SUDAH_DIWAWANCARA || 0 },
         { label: "Disetujui", jumlah: statusCountMap.DISETUJUI || 0 },
         { label: "Ditolak", jumlah: statusCountMap.DITOLAK || 0 },
+        { label: "Tidak Dapat Diwawancara", jumlah: statusCountMap.TIDAK_DAPAT_DIWAWANCARA || 0 },
     ];
 
     const sumJumlah = (items) => items.reduce((sum, item) => sum + item.jumlah, 0);
@@ -498,6 +500,7 @@ export async function listSurveyor(req, res) {
                 disetujui: statusCounts.DISETUJUI || 0,
                 menungguValidasi: statusCounts.SUDAH_DIWAWANCARA || 0,
                 ditolak: statusCounts.DITOLAK || 0,
+                kendala: statusCounts.TIDAK_DAPAT_DIWAWANCARA || 0,
             },
         };
     });

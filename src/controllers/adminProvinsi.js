@@ -341,6 +341,7 @@ const STATUS_LABEL = {
     SUDAH_DIWAWANCARA: "Menunggu Validasi",
     DISETUJUI: "Disetujui",
     DITOLAK: "Ditolak",
+    TIDAK_DAPAT_DIWAWANCARA: "Tidak Dapat Diwawancara",
 };
 
 export async function listWarga(req, res) {
@@ -568,6 +569,7 @@ export async function getCharts(req, res) {
         { label: "Sudah Disurvei", jumlah: statusCountMap.SUDAH_DIWAWANCARA || 0 },
         { label: "Disetujui", jumlah: statusCountMap.DISETUJUI || 0 },
         { label: "Ditolak", jumlah: statusCountMap.DITOLAK || 0 },
+        { label: "Tidak Dapat Diwawancara", jumlah: statusCountMap.TIDAK_DAPAT_DIWAWANCARA || 0 },
     ];
 
     const wilayahItems = groupedWilayah
@@ -884,6 +886,7 @@ export async function listSurveyor(req, res) {
                 disetujui: statusCounts.DISETUJUI || 0,
                 menungguValidasi: statusCounts.SUDAH_DIWAWANCARA || 0,
                 ditolak: statusCounts.DITOLAK || 0,
+                kendala: statusCounts.TIDAK_DAPAT_DIWAWANCARA || 0,
             },
         };
     });

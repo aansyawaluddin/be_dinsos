@@ -15,6 +15,7 @@ const STATUS_LABEL = {
     SUDAH_DIWAWANCARA: "Menunggu Validasi",
     DISETUJUI: "Disetujui",
     DITOLAK: "Ditolak",
+    TIDAK_DAPAT_DIWAWANCARA: "Tidak Dapat Diwawancara",
 };
 
 const BULAN_INDONESIA = [
@@ -242,6 +243,9 @@ export async function listTugasWarga(req, res) {
     if (status === "belum") {
         where.statusWawancara = "BELUM_DIWAWANCARA";
     }
+    if (status === "kendala") {
+        where.statusWawancara = "TIDAK_DAPAT_DIWAWANCARA";
+    }
 
     if (search) {
         where.OR = [
@@ -335,14 +339,20 @@ export async function reportKendalaSurvei(req, res) {
 
     const fotoPathBaru = path.relative(UPLOAD_ROOT, fotoFile.path);
 
-    const kendalaBaru = await prisma.kendalaSurvei.create({
-        data: {
-            wargaId: id,
-            keterangan: kendalaSurvei.trim(),
-            foto: fotoPathBaru,
-            reportedById: surveyorId,
-        },
-    });
+    const [kendalaBaru] = await prisma.$transaction([
+        prisma.kendalaSurvei.create({
+            data: {
+                wargaId: id,
+                keterangan: kendalaSurvei.trim(),
+                foto: fotoPathBaru,
+                reportedById: surveyorId,
+            },
+        }),
+        prisma.warga.update({
+            where: { id },
+            data: { statusWawancara: "TIDAK_DAPAT_DIWAWANCARA" },
+        }),
+    ]);
 
     return success(
         res,

@@ -38,7 +38,8 @@ enum StatusWawancara {
   BELUM_DIWAWANCARA
   SUDAH_DIWAWANCARA
   DISETUJUI    
-  DITOLAK 
+  DITOLAK
+  TIDAK_DAPAT_DIWAWANCARA
 }
 
 enum JenisPertanyaan {
