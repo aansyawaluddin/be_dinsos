@@ -18,6 +18,10 @@ const STATUS_LABEL = {
     TIDAK_DAPAT_DIWAWANCARA: "Tidak Dapat Diwawancara",
 };
 
+function maskStatusUntukSurveyor(status) {
+    return status === "TIDAK_DAPAT_DIWAWANCARA" ? "BELUM_DIWAWANCARA" : status;
+}
+
 const BULAN_INDONESIA = [
     "Januari", "Februari", "Maret", "April", "Mei", "Juni",
     "Juli", "Agustus", "September", "Oktober", "November", "Desember",
@@ -270,22 +274,26 @@ export async function listTugasWarga(req, res) {
         orderBy: { id: "asc" },
     });
 
-    const items = rows.map((w) => ({
-        id: w.id,
-        nik: w.nik,
-        nama: w.nama,
-        inisial: getInitials(w.nama),
-        statusLabel: STATUS_LABEL[w.statusWawancara] ?? w.statusWawancara,
-        keteranganValidasi: w.keteranganValidasi,
-        kendalaTerakhir: w.kendalaSurvei[0]
-            ? {
-                id: w.kendalaSurvei[0].id,
-                keterangan: w.kendalaSurvei[0].keterangan,
-                foto: w.kendalaSurvei[0].foto ? `/uploads/${w.kendalaSurvei[0].foto}` : null,
-                createdAt: w.kendalaSurvei[0].createdAt,
-            }
-            : null,
-    }));
+    const items = rows.map((w) => {
+        const statusTampil = maskStatusUntukSurveyor(w.statusWawancara);
+        return {
+            id: w.id,
+            nik: w.nik,
+            nama: w.nama,
+            inisial: getInitials(w.nama),
+            statusWawancara: statusTampil,
+            statusLabel: STATUS_LABEL[statusTampil] ?? statusTampil,
+            keteranganValidasi: w.keteranganValidasi,
+            kendalaTerakhir: w.kendalaSurvei[0]
+                ? {
+                    id: w.kendalaSurvei[0].id,
+                    keterangan: w.kendalaSurvei[0].keterangan,
+                    foto: w.kendalaSurvei[0].foto ? `/uploads/${w.kendalaSurvei[0].foto}` : null,
+                    createdAt: w.kendalaSurvei[0].createdAt,
+                }
+                : null,
+        };
+    });
 
     return success(res, { items, total: items.length });
 }
@@ -395,6 +403,8 @@ export async function getTugasWargaDetail(req, res) {
         return error(res, "Warga ini di luar wilayah tugas Anda", 403);
     }
 
+    const statusTampil = maskStatusUntukSurveyor(warga.statusWawancara);
+
     return success(res, {
         id: warga.id,
         kk: warga.nomorKK,
@@ -408,7 +418,8 @@ export async function getTugasWargaDetail(req, res) {
         usia: hitungUsia(warga.tanggalLahir),
         posisiDalamKeluarga: warga.hubunganKeluarga,
         keteranganValidasi: warga.keteranganValidasi,
-        statusLabel: STATUS_LABEL[warga.statusWawancara] ?? warga.statusWawancara,
+        statusWawancara: statusTampil,
+        statusLabel: STATUS_LABEL[statusTampil] ?? statusTampil,
         kendalaSurvei: warga.kendalaSurvei.map((k) => ({
             id: k.id,
             keterangan: k.keterangan,
