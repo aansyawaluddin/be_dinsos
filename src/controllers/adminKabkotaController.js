@@ -128,7 +128,10 @@ export async function getWargaDetail(req, res) {
         where: { id },
         include: {
             diwawancaraOleh: { select: { nama: true } },
-            kendalaSurvei: { orderBy: { createdAt: "asc" } },
+            kendalaSurvei: {
+                orderBy: { createdAt: "asc" },
+                include: { reportedBy: { select: { nama: true } } },
+            },
         },
     });
 
@@ -138,6 +141,8 @@ export async function getWargaDetail(req, res) {
     if (warga.kabupatenKota !== kabupatenKota) {
         return error(res, "Data warga ini di luar wilayah Anda", 403);
     }
+
+    const kendalaTerakhir = warga.kendalaSurvei[warga.kendalaSurvei.length - 1];
 
     return success(res, {
         id: warga.id,
@@ -151,7 +156,7 @@ export async function getWargaDetail(req, res) {
         usia: hitungUsia(warga.tanggalLahir),
         statusLabel: STATUS_LABEL[warga.statusWawancara] ?? warga.statusWawancara,
         keteranganValidasi: warga.keteranganValidasi,
-        surveyor: warga.diwawancaraOleh?.nama ?? null,
+        surveyor: warga.diwawancaraOleh?.nama ?? kendalaTerakhir?.reportedBy?.nama ?? null,
         kendalaSurvei: warga.kendalaSurvei.map((k) => ({
             id: k.id,
             keterangan: k.keterangan,
