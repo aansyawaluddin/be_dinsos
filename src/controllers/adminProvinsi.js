@@ -1110,6 +1110,7 @@ async function* sisipkanKembali(nilaiPertama, iteratorSisa) {
 }
 
 const SEMUA_STATUS_ALIASES = ["semua", "semua status", "semua_status", "all"];
+const TIDAK_DAPAT_ALIASES = ["tidak_dapat_diwawancara", "tidak dapat diwawancara", "kendala", "kendala survei"];
 const STATUS_UNTUK_SEMUA = ["SUDAH_DIWAWANCARA", "DISETUJUI", "DITOLAK"];
 const STATUS_LABEL_EXPORT = {
     SUDAH_DIWAWANCARA: "Menunggu Validasi",
@@ -1122,17 +1123,22 @@ export async function exportExcel(req, res) {
 
     const { kabupatenKota: kabupatenKotaRaw, statusWawancara: statusWawancaraRaw } = req.query;
 
-    const isSemuaStatus = statusWawancaraRaw && SEMUA_STATUS_ALIASES.includes(String(statusWawancaraRaw).trim().toLowerCase());
+    const rawStatusLower = statusWawancaraRaw ? String(statusWawancaraRaw).trim().toLowerCase() : null;
+
+    const isSemuaStatus = rawStatusLower && SEMUA_STATUS_ALIASES.includes(rawStatusLower);
+    const isTidakDapat = TIDAK_DAPAT_ALIASES.includes(rawStatusLower);
 
     let statusWawancara;
     if (isSemuaStatus) {
         statusWawancara = "SEMUA";
+    } else if (isTidakDapat) {
+        statusWawancara = "TIDAK_DAPAT_DIWAWANCARA";
     } else {
         statusWawancara = statusWawancaraRaw ? resolveStatusValidasi(statusWawancaraRaw) : "DISETUJUI";
         if (!statusWawancara) {
             return error(
                 res,
-                `Status "${statusWawancaraRaw}" tidak dikenali. Gunakan salah satu: Menunggu Validasi, Sudah Divalidasi, Ditolak, atau Semua Status`,
+                `Status "${statusWawancaraRaw}" tidak dikenali. Gunakan salah satu: Menunggu Validasi, Sudah Divalidasi, Ditolak, Tidak Dapat Diwawancara, atau Semua Status`,
                 400
             );
         }
@@ -1163,7 +1169,9 @@ export async function exportExcel(req, res) {
     const first = await rowIterator.next();
 
     if (first.done) {
-        const statusLabel = isSemuaStatus ? "Semua Status" : mapStatusValidasiLabel(statusWawancara);
+        const statusLabel = isSemuaStatus
+            ? "Semua Status"
+            : (STATUS_LABEL[statusWawancara] ?? mapStatusValidasiLabel(statusWawancara));
         return error(res, `Belum ada data warga dengan status "${statusLabel}" untuk wilayah ini`, 404);
     }
 
