@@ -673,39 +673,25 @@ export async function submitWawancara(req, res) {
 
     await prisma.$transaction(async (tx) => {
         for (const jv of jawabanValid) {
-            const existing = await tx.jawabanWawancara.findUnique({
+            const jawabanRecord = await tx.jawabanWawancara.upsert({
                 where: { wargaId_pertanyaanId: { wargaId: id, pertanyaanId: jv.pertanyaanId } },
+                create: {
+                    wargaId: id,
+                    pertanyaanId: jv.pertanyaanId,
+                    nilaiTeks: jv.tipe === "NILAI" ? jv.nilaiTeks : null,
+                },
+                update: {
+                    nilaiTeks: jv.tipe === "NILAI" ? jv.nilaiTeks : null,
+                },
             });
 
-            if (jv.tipe === "NILAI") {
-                if (existing) {
-                    await tx.jawabanOpsiDipilih.deleteMany({ where: { jawabanId: existing.id } });
-                    await tx.jawabanWawancara.update({
-                        where: { id: existing.id },
-                        data: { nilaiTeks: jv.nilaiTeks },
-                    });
-                } else {
-                    await tx.jawabanWawancara.create({
-                        data: { wargaId: id, pertanyaanId: jv.pertanyaanId, nilaiTeks: jv.nilaiTeks },
-                    });
-                }
-                continue;
+            await tx.jawabanOpsiDipilih.deleteMany({ where: { jawabanId: jawabanRecord.id } });
+
+            if (jv.tipe === "OPSI") {
+                await tx.jawabanOpsiDipilih.createMany({
+                    data: jv.opsiIds.map((opsiId) => ({ jawabanId: jawabanRecord.id, opsiId })),
+                });
             }
-
-            const jawabanRecord = existing
-                ? existing
-                : await tx.jawabanWawancara.create({ data: { wargaId: id, pertanyaanId: jv.pertanyaanId } });
-
-            if (existing) {
-                await tx.jawabanOpsiDipilih.deleteMany({ where: { jawabanId: existing.id } });
-                if (existing.nilaiTeks !== null) {
-                    await tx.jawabanWawancara.update({ where: { id: existing.id }, data: { nilaiTeks: null } });
-                }
-            }
-
-            await tx.jawabanOpsiDipilih.createMany({
-                data: jv.opsiIds.map((opsiId) => ({ jawabanId: jawabanRecord.id, opsiId })),
-            });
         }
     });
 
