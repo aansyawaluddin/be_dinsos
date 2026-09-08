@@ -28,7 +28,10 @@ const BULAN_INDONESIA = [
 ];
 
 const UPLOAD_ROOT = path.join(process.cwd(), "uploads");
+const LOG_ROOT = path.join(process.cwd(), "logs");
 const MAKS_KENDALA = 2;
+
+fs.mkdirSync(LOG_ROOT, { recursive: true });
 
 function formatTanggalIndonesia(date) {
     const d = date instanceof Date ? date : new Date(date);
@@ -54,6 +57,11 @@ function wilayahLengkap(surveyor) {
 
 function unlinkSafe(filePath) {
     if (filePath) fs.unlink(filePath, () => { });
+}
+
+function logValidasiGagal(wargaId, errors, jawaban) {
+    const logLine = `${new Date().toISOString()} wargaId=${wargaId} errors=${JSON.stringify(errors)} jawaban=${JSON.stringify(jawaban)}\n`;
+    fs.appendFile(path.join(LOG_ROOT, "validasi-gagal.log"), logLine, () => { });
 }
 
 export async function uploadFotoProfile(req, res) {
@@ -580,7 +588,12 @@ export async function submitWawancara(req, res) {
     const jawabanValid = [];
 
     for (const soal of semuaPertanyaan) {
-        const nilai = jawaban[soal.kode];
+        let nilai = jawaban[soal.kode];
+
+        if (soal.jenis === "ANGKA" && typeof nilai === "string" && nilai.trim() === ".") {
+            nilai = "";
+        }
+
         const kosong =
             nilai === undefined ||
             nilai === null ||
@@ -653,6 +666,7 @@ export async function submitWawancara(req, res) {
     }
 
     if (errors.length > 0) {
+        logValidasiGagal(id, errors, jawaban);
         unlinkSemuaFile();
         return error(res, "Jawaban tidak valid", 400, errors);
     }
