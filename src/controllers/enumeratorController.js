@@ -64,6 +64,14 @@ function logValidasiGagal(wargaId, errors, jawaban) {
     fs.appendFile(path.join(LOG_ROOT, "validasi-gagal.log"), logLine, () => { });
 }
 
+class SubmitWawancaraError extends Error {
+    constructor(code, message) {
+        super(message);
+        this.name = "SubmitWawancaraError";
+        this.code = code;
+    }
+}
+
 export async function uploadFotoProfile(req, res) {
     const userId = req.user.id;
     const fotoFile = req.file;
@@ -498,6 +506,18 @@ export async function getInstrumen(req, res) {
     return success(res, { blok: data });
 }
 
+async function runTransactionWithRetry(fn, { retries = 3, isolationLevel = "ReadCommitted" } = {}) {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+            return await prisma.$transaction(fn, { isolationLevel });
+        } catch (err) {
+            const bisaRetry = err.code === "P2034" || err.code === "P2028";
+            if (!bisaRetry || attempt === retries) throw err;
+            await new Promise((r) => setTimeout(r, 75 * attempt)); // backoff kecil: 75ms, 150ms, ...
+        }
+    }
+}
+
 export async function submitWawancara(req, res) {
     const surveyorId = req.user.id;
     const id = Number(req.params.id);
@@ -550,30 +570,29 @@ export async function submitWawancara(req, res) {
 
     const { latitude, longitude } = req.body;
 
-    const [surveyor, warga] = await Promise.all([
+    const [surveyor, wargaCek] = await Promise.all([
         getSurveyorRegion(surveyorId),
         prisma.warga.findUnique({ where: { id } }),
     ]);
 
-    if (!warga) {
+    if (!wargaCek) {
         unlinkSemuaFile();
         return error(res, "Data warga tidak ditemukan", 404);
     }
     if (
         !wilayahLengkap(surveyor) ||
-        warga.kabupatenKota !== surveyor.kabupatenKota ||
-        warga.kecamatan !== surveyor.kecamatanTugas ||
-        warga.desaKelurahan !== surveyor.kelurahanTugas
+        wargaCek.kabupatenKota !== surveyor.kabupatenKota ||
+        wargaCek.kecamatan !== surveyor.kecamatanTugas ||
+        wargaCek.desaKelurahan !== surveyor.kelurahanTugas
     ) {
         unlinkSemuaFile();
         return error(res, "Warga ini di luar wilayah tugas Anda", 403);
     }
-
-    if (["SUDAH_DIWAWANCARA", "DISETUJUI"].includes(warga.statusWawancara)) {
+    if (["SUDAH_DIWAWANCARA", "DISETUJUI"].includes(wargaCek.statusWawancara)) {
         unlinkSemuaFile();
         return error(
             res,
-            warga.statusWawancara === "DISETUJUI"
+            wargaCek.statusWawancara === "DISETUJUI"
                 ? "Wawancara ini sudah divalidasi/disetujui, tidak bisa diubah lagi"
                 : "Wawancara ini sedang menunggu validasi, tidak bisa disurvei ulang",
             400
@@ -671,30 +690,6 @@ export async function submitWawancara(req, res) {
         return error(res, "Jawaban tidak valid", 400, errors);
     }
 
-    await prisma.$transaction(async (tx) => {
-        for (const jv of jawabanValid) {
-            const jawabanRecord = await tx.jawabanWawancara.upsert({
-                where: { wargaId_pertanyaanId: { wargaId: id, pertanyaanId: jv.pertanyaanId } },
-                create: {
-                    wargaId: id,
-                    pertanyaanId: jv.pertanyaanId,
-                    nilaiTeks: jv.tipe === "NILAI" ? jv.nilaiTeks : null,
-                },
-                update: {
-                    nilaiTeks: jv.tipe === "NILAI" ? jv.nilaiTeks : null,
-                },
-            });
-
-            await tx.jawabanOpsiDipilih.deleteMany({ where: { jawabanId: jawabanRecord.id } });
-
-            if (jv.tipe === "OPSI") {
-                await tx.jawabanOpsiDipilih.createMany({
-                    data: jv.opsiIds.map((opsiId) => ({ jawabanId: jawabanRecord.id, opsiId })),
-                });
-            }
-        }
-    });
-
     const hasLatitude = latitude !== undefined && latitude !== null && latitude !== "";
     const hasLongitude = longitude !== undefined && longitude !== null && longitude !== "";
 
@@ -705,41 +700,104 @@ export async function submitWawancara(req, res) {
     const fotoKtpPathBaru = fotoKtpFile ? path.relative(UPLOAD_ROOT, fotoKtpFile.path) : null;
     const fotoKkPathBaru = fotoKkFile ? path.relative(UPLOAD_ROOT, fotoKkFile.path) : null;
 
-    const updated = await prisma.warga.update({
-        where: { id },
-        data: {
-            statusWawancara: "SUDAH_DIWAWANCARA",
-            keteranganValidasi: null,
-            ...(warga.tanggalWawancara ? {} : { tanggalWawancara: new Date() }),
-            diwawancaraOlehId: surveyorId,
-            fotoDokumentasi: fotoPathBaru,
-            fotoRumah: fotoRumahPathBaru,
-            tandaTanganResponden: ttdRespondenPathBaru,
-            tandaTanganEnumerator: ttdEnumeratorPathBaru,
-            ...(hasLatitude ? { latitude: Number(latitude) } : {}),
-            ...(hasLongitude ? { longitude: Number(longitude) } : {}),
-            ...(fotoKtpPathBaru ? { fotoKtp: fotoKtpPathBaru } : {}),
-            ...(fotoKkPathBaru ? { fotoKk: fotoKkPathBaru } : {}),
-        },
-    });
+    let wargaSebelum, updated;
+    try {
+        const hasil = await runTransactionWithRetry(async (tx) => {
+            const [wargaTerkunci] = await tx.$queryRaw`
+                SELECT * FROM warga WHERE id = ${id} FOR UPDATE
+            `;
 
-    if (warga.fotoDokumentasi && warga.fotoDokumentasi !== fotoPathBaru) {
-        unlinkSafe(path.join(UPLOAD_ROOT, warga.fotoDokumentasi));
+            if (!wargaTerkunci) {
+                throw new SubmitWawancaraError("NOT_FOUND", "Data warga tidak ditemukan");
+            }
+            if (
+                wargaTerkunci.kabupatenKota !== surveyor.kabupatenKota ||
+                wargaTerkunci.kecamatan !== surveyor.kecamatanTugas ||
+                wargaTerkunci.desaKelurahan !== surveyor.kelurahanTugas
+            ) {
+                throw new SubmitWawancaraError("FORBIDDEN", "Warga ini di luar wilayah tugas Anda");
+            }
+            if (["SUDAH_DIWAWANCARA", "DISETUJUI"].includes(wargaTerkunci.statusWawancara)) {
+                throw new SubmitWawancaraError(
+                    "ALREADY_SUBMITTED",
+                    wargaTerkunci.statusWawancara === "DISETUJUI"
+                        ? "Wawancara ini sudah divalidasi/disetujui, tidak bisa diubah lagi"
+                        : "Wawancara ini sedang menunggu validasi, tidak bisa disurvei ulang"
+                );
+            }
+
+            for (const jv of jawabanValid) {
+                const jawabanRecord = await tx.jawabanWawancara.upsert({
+                    where: { wargaId_pertanyaanId: { wargaId: id, pertanyaanId: jv.pertanyaanId } },
+                    create: {
+                        wargaId: id,
+                        pertanyaanId: jv.pertanyaanId,
+                        nilaiTeks: jv.tipe === "NILAI" ? jv.nilaiTeks : null,
+                    },
+                    update: {
+                        nilaiTeks: jv.tipe === "NILAI" ? jv.nilaiTeks : null,
+                    },
+                });
+
+                await tx.jawabanOpsiDipilih.deleteMany({ where: { jawabanId: jawabanRecord.id } });
+
+                if (jv.tipe === "OPSI") {
+                    await tx.jawabanOpsiDipilih.createMany({
+                        data: jv.opsiIds.map((opsiId) => ({ jawabanId: jawabanRecord.id, opsiId })),
+                    });
+                }
+            }
+
+            const wargaUpdated = await tx.warga.update({
+                where: { id },
+                data: {
+                    statusWawancara: "SUDAH_DIWAWANCARA",
+                    keteranganValidasi: null,
+                    ...(wargaTerkunci.tanggalWawancara ? {} : { tanggalWawancara: new Date() }),
+                    diwawancaraOlehId: surveyorId,
+                    fotoDokumentasi: fotoPathBaru,
+                    fotoRumah: fotoRumahPathBaru,
+                    tandaTanganResponden: ttdRespondenPathBaru,
+                    tandaTanganEnumerator: ttdEnumeratorPathBaru,
+                    ...(hasLatitude ? { latitude: Number(latitude) } : {}),
+                    ...(hasLongitude ? { longitude: Number(longitude) } : {}),
+                    ...(fotoKtpPathBaru ? { fotoKtp: fotoKtpPathBaru } : {}),
+                    ...(fotoKkPathBaru ? { fotoKk: fotoKkPathBaru } : {}),
+                },
+            });
+
+            return { wargaSebelum: wargaTerkunci, wargaSesudah: wargaUpdated };
+        });
+
+        wargaSebelum = hasil.wargaSebelum;
+        updated = hasil.wargaSesudah;
+    } catch (err) {
+        unlinkSemuaFile();
+        if (err instanceof SubmitWawancaraError) {
+            const statusCode = err.code === "NOT_FOUND" ? 404 : err.code === "FORBIDDEN" ? 403 : 400;
+            return error(res, err.message, statusCode);
+        }
+        console.error("Error submitWawancara:", err);
+        return error(res, "Terjadi kesalahan sistem saat menyimpan wawancara", 500);
     }
-    if (warga.fotoRumah && warga.fotoRumah !== fotoRumahPathBaru) {
-        unlinkSafe(path.join(UPLOAD_ROOT, warga.fotoRumah));
+
+    if (wargaSebelum.fotoDokumentasi && wargaSebelum.fotoDokumentasi !== fotoPathBaru) {
+        unlinkSafe(path.join(UPLOAD_ROOT, wargaSebelum.fotoDokumentasi));
     }
-    if (warga.tandaTanganResponden && warga.tandaTanganResponden !== ttdRespondenPathBaru) {
-        unlinkSafe(path.join(UPLOAD_ROOT, warga.tandaTanganResponden));
+    if (wargaSebelum.fotoRumah && wargaSebelum.fotoRumah !== fotoRumahPathBaru) {
+        unlinkSafe(path.join(UPLOAD_ROOT, wargaSebelum.fotoRumah));
     }
-    if (warga.tandaTanganEnumerator && warga.tandaTanganEnumerator !== ttdEnumeratorPathBaru) {
-        unlinkSafe(path.join(UPLOAD_ROOT, warga.tandaTanganEnumerator));
+    if (wargaSebelum.tandaTanganResponden && wargaSebelum.tandaTanganResponden !== ttdRespondenPathBaru) {
+        unlinkSafe(path.join(UPLOAD_ROOT, wargaSebelum.tandaTanganResponden));
     }
-    if (fotoKtpPathBaru && warga.fotoKtp && warga.fotoKtp !== fotoKtpPathBaru) {
-        unlinkSafe(path.join(UPLOAD_ROOT, warga.fotoKtp));
+    if (wargaSebelum.tandaTanganEnumerator && wargaSebelum.tandaTanganEnumerator !== ttdEnumeratorPathBaru) {
+        unlinkSafe(path.join(UPLOAD_ROOT, wargaSebelum.tandaTanganEnumerator));
     }
-    if (fotoKkPathBaru && warga.fotoKk && warga.fotoKk !== fotoKkPathBaru) {
-        unlinkSafe(path.join(UPLOAD_ROOT, warga.fotoKk));
+    if (fotoKtpPathBaru && wargaSebelum.fotoKtp && wargaSebelum.fotoKtp !== fotoKtpPathBaru) {
+        unlinkSafe(path.join(UPLOAD_ROOT, wargaSebelum.fotoKtp));
+    }
+    if (fotoKkPathBaru && wargaSebelum.fotoKk && wargaSebelum.fotoKk !== fotoKkPathBaru) {
+        unlinkSafe(path.join(UPLOAD_ROOT, wargaSebelum.fotoKk));
     }
 
     return success(
@@ -761,7 +819,6 @@ export async function submitWawancara(req, res) {
         "Wawancara berhasil disimpan"
     );
 }
-
 export async function getHasilWawancara(req, res) {
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0) {
