@@ -64,6 +64,23 @@ function logValidasiGagal(wargaId, errors, jawaban) {
     fs.appendFile(path.join(LOG_ROOT, "validasi-gagal.log"), logLine, () => { });
 }
 
+function logAutoDefaultAngka(wargaId, kode, nilaiAsli) {
+    const logLine = `${new Date().toISOString()} wargaId=${wargaId} kode=${kode} nilaiAsli=${JSON.stringify(nilaiAsli)} => didefault ke 0\n`;
+    fs.appendFile(path.join(LOG_ROOT, "auto-default-angka.log"), logLine, () => { });
+}
+
+function logSubmitWawancara({ status, wargaId, surveyorId, message, detail }) {
+    const parts = [
+        new Date().toISOString(),
+        `status=${status}`,
+        `wargaId=${wargaId ?? "-"}`,
+        `surveyorId=${surveyorId ?? "-"}`,
+        `message=${JSON.stringify(message)}`,
+    ];
+    if (detail !== undefined) parts.push(`detail=${JSON.stringify(detail)}`);
+    fs.appendFile(path.join(LOG_ROOT, "submit-wawancara.log"), parts.join(" ") + "\n", () => { });
+}
+
 class SubmitWawancaraError extends Error {
     constructor(code, message) {
         super(message);
@@ -540,18 +557,22 @@ export async function submitWawancara(req, res) {
 
     if (!fotoFile) {
         unlinkSemuaFile();
+        logSubmitWawancara({ status: "FAILED", wargaId: id, surveyorId, message: "Foto dokumentasi wawancara wajib diupload" });
         return error(res, "Foto dokumentasi wawancara wajib diupload", 400);
     }
     if (!fotoRumahFile) {
         unlinkSemuaFile();
+        logSubmitWawancara({ status: "FAILED", wargaId: id, surveyorId, message: "Foto rumah wajib diupload" });
         return error(res, "Foto rumah wajib diupload", 400);
     }
     if (!ttdRespondenFile) {
         unlinkSemuaFile();
+        logSubmitWawancara({ status: "FAILED", wargaId: id, surveyorId, message: "Tanda tangan responden wajib diupload" });
         return error(res, "Tanda tangan responden wajib diupload", 400);
     }
     if (!ttdEnumeratorFile) {
         unlinkSemuaFile();
+        logSubmitWawancara({ status: "FAILED", wargaId: id, surveyorId, message: "Tanda tangan enumerator wajib diupload" });
         return error(res, "Tanda tangan enumerator wajib diupload", 400);
     }
 
@@ -560,11 +581,13 @@ export async function submitWawancara(req, res) {
         jawaban = typeof req.body.jawaban === "string" ? JSON.parse(req.body.jawaban) : req.body.jawaban;
     } catch (err) {
         unlinkSemuaFile();
+        logSubmitWawancara({ status: "FAILED", wargaId: id, surveyorId, message: 'Field "jawaban" harus berupa JSON string yang valid' });
         return error(res, 'Field "jawaban" harus berupa JSON string yang valid', 400);
     }
 
     if (!jawaban || typeof jawaban !== "object" || Array.isArray(jawaban)) {
         unlinkSemuaFile();
+        logSubmitWawancara({ status: "FAILED", wargaId: id, surveyorId, message: "Jawaban wawancara wajib diisi" });
         return error(res, "Jawaban wawancara wajib diisi", 400);
     }
 
@@ -577,6 +600,7 @@ export async function submitWawancara(req, res) {
 
     if (!wargaCek) {
         unlinkSemuaFile();
+        logSubmitWawancara({ status: "FAILED", wargaId: id, surveyorId, message: "Data warga tidak ditemukan" });
         return error(res, "Data warga tidak ditemukan", 404);
     }
     if (
@@ -586,17 +610,16 @@ export async function submitWawancara(req, res) {
         wargaCek.desaKelurahan !== surveyor.kelurahanTugas
     ) {
         unlinkSemuaFile();
+        logSubmitWawancara({ status: "FAILED", wargaId: id, surveyorId, message: "Warga ini di luar wilayah tugas Anda" });
         return error(res, "Warga ini di luar wilayah tugas Anda", 403);
     }
     if (["SUDAH_DIWAWANCARA", "DISETUJUI"].includes(wargaCek.statusWawancara)) {
+        const pesanStatus = wargaCek.statusWawancara === "DISETUJUI"
+            ? "Wawancara ini sudah divalidasi/disetujui, tidak bisa diubah lagi"
+            : "Wawancara ini sedang menunggu validasi, tidak bisa disurvei ulang";
         unlinkSemuaFile();
-        return error(
-            res,
-            wargaCek.statusWawancara === "DISETUJUI"
-                ? "Wawancara ini sudah divalidasi/disetujui, tidak bisa diubah lagi"
-                : "Wawancara ini sedang menunggu validasi, tidak bisa disurvei ulang",
-            400
-        );
+        logSubmitWawancara({ status: "FAILED", wargaId: id, surveyorId, message: pesanStatus });
+        return error(res, pesanStatus, 400);
     }
 
     const semuaPertanyaan = await prisma.pertanyaanWawancara.findMany({
@@ -606,8 +629,14 @@ export async function submitWawancara(req, res) {
     const errors = [];
     const jawabanValid = [];
 
+    const KODE_HITUNGAN_DEFAULT_NOL = new Set([
+        "A10a", "A10b", "A10c", "A10d", "A10e",
+        "A10f", "A10g", "A10h", "A10i", "A10j",
+    ]);
+
     for (const soal of semuaPertanyaan) {
         let nilai = jawaban[soal.kode];
+        const nilaiAsli = nilai;
 
         if (soal.jenis === "ANGKA" && typeof nilai === "string" && nilai.trim() === ".") {
             nilai = "";
@@ -619,8 +648,21 @@ export async function submitWawancara(req, res) {
             nilai === "" ||
             (Array.isArray(nilai) && nilai.length === 0);
 
+        if (kosong && soal.jenis === "ANGKA" && KODE_HITUNGAN_DEFAULT_NOL.has(soal.kode)) {
+            logAutoDefaultAngka(id, soal.kode, nilaiAsli);
+            jawabanValid.push({
+                pertanyaanId: soal.id,
+                kodePertanyaan: soal.kode,
+                tipe: "NILAI",
+                nilaiTeks: "0",
+            });
+            continue;
+        }
+
         if (soal.wajib && kosong) {
-            errors.push(`${soal.kode} (${soal.variabel}) wajib diisi`);
+            errors.push(
+                `${soal.kode} (${soal.variabel}) wajib diisi (nilai diterima: ${JSON.stringify(nilaiAsli ?? null)})`
+            );
             continue;
         }
         if (kosong) continue;
@@ -634,7 +676,9 @@ export async function submitWawancara(req, res) {
             if (soal.jenis === "ANGKA") {
                 const angka = Number(nilai);
                 if (Number.isNaN(angka)) {
-                    errors.push(`${soal.kode}: harus berupa angka yang valid`);
+                    errors.push(
+                        `${soal.kode}: harus berupa angka yang valid (nilai diterima: ${JSON.stringify(nilaiAsli)})`
+                    );
                     continue;
                 }
                 jawabanValid.push({
@@ -664,7 +708,9 @@ export async function submitWawancara(req, res) {
         const kodeOpsiValid = soal.opsi.map((o) => o.kode);
         const tidakValid = nilaiArray.filter((v) => !kodeOpsiValid.includes(v));
         if (tidakValid.length > 0) {
-            errors.push(`${soal.kode}: pilihan tidak valid (${tidakValid.join(", ")})`);
+            errors.push(
+                `${soal.kode}: pilihan tidak valid (${tidakValid.join(", ")}) — opsi terdaftar: ${kodeOpsiValid.join(", ")}`
+            );
             continue;
         }
 
@@ -686,6 +732,7 @@ export async function submitWawancara(req, res) {
 
     if (errors.length > 0) {
         logValidasiGagal(id, errors, jawaban);
+        logSubmitWawancara({ status: "FAILED", wargaId: id, surveyorId, message: "Jawaban tidak valid", detail: errors });
         unlinkSemuaFile();
         return error(res, "Jawaban tidak valid", 400, errors);
     }
@@ -775,9 +822,11 @@ export async function submitWawancara(req, res) {
         unlinkSemuaFile();
         if (err instanceof SubmitWawancaraError) {
             const statusCode = err.code === "NOT_FOUND" ? 404 : err.code === "FORBIDDEN" ? 403 : 400;
+            logSubmitWawancara({ status: "FAILED", wargaId: id, surveyorId, message: err.message, detail: err.code });
             return error(res, err.message, statusCode);
         }
         console.error("Error submitWawancara:", err);
+        logSubmitWawancara({ status: "FAILED", wargaId: id, surveyorId, message: "Terjadi kesalahan sistem saat menyimpan wawancara", detail: err.message });
         return error(res, "Terjadi kesalahan sistem saat menyimpan wawancara", 500);
     }
 
@@ -800,6 +849,8 @@ export async function submitWawancara(req, res) {
         unlinkSafe(path.join(UPLOAD_ROOT, wargaSebelum.fotoKk));
     }
 
+    logSubmitWawancara({ status: "SUCCESS", wargaId: id, surveyorId, message: "Wawancara berhasil disimpan" });
+
     return success(
         res,
         {
@@ -819,6 +870,7 @@ export async function submitWawancara(req, res) {
         "Wawancara berhasil disimpan"
     );
 }
+
 export async function getHasilWawancara(req, res) {
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0) {

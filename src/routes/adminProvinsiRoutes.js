@@ -68,5 +68,12 @@ router.get("/export/excel", authenticate, authorize("ADMIN_PROVINSI"), asyncHand
 
 router.get("/export/rekap-kehadiran", authenticate, authorize("ADMIN_PROVINSI"), asyncHandler(ctrl.exportRekapKehadiran));
 
+router.get(
+    "/statistik-harian-wawancara",
+    authenticate,
+    authorize("ADMIN_PROVINSI"),
+    asyncHandler(ctrl.getStatistikHarianWawancara)
+);
+
 
 export default router;

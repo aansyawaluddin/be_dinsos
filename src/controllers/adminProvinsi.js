@@ -3,6 +3,7 @@ import ExcelJS from "exceljs"
 import path from "path";
 import fs from "fs";
 import prisma from "../lib/prisma.js";
+import { Prisma } from "@prisma/client";
 import { success, error } from "../utils/response.js";
 import { hashPassword } from "../utils/hash.js";
 import { buildRekapKehadiranWorkbook } from "../utils/rekapKehadiran.js";
@@ -1267,4 +1268,73 @@ export async function exportRekapKehadiran(req, res) {
     );
     res.setHeader("Content-Disposition", `attachment; filename="${namaFile}"`);
     return res.send(buffer);
+}
+
+export async function getStatistikHarianWawancara(req, res) {
+    const { kabupatenKota: kabupatenKotaRaw, startDate, endDate } = req.query;
+
+    let kabupatenKota = null;
+    if (kabupatenKotaRaw) {
+        kabupatenKota = resolveKabupatenKota(kabupatenKotaRaw);
+        if (!kabupatenKota) {
+            return error(res, `Kabupaten/Kota "${kabupatenKotaRaw}" tidak dikenali`, 400);
+        }
+    }
+
+    const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+    if (startDate && !DATE_REGEX.test(startDate)) {
+        return error(res, "Format startDate harus YYYY-MM-DD", 400);
+    }
+    if (endDate && !DATE_REGEX.test(endDate)) {
+        return error(res, "Format endDate harus YYYY-MM-DD", 400);
+    }
+
+    const kondisi = [
+        Prisma.sql`statusWawancara IN ('SUDAH_DIWAWANCARA', 'DISETUJUI')`,
+        Prisma.sql`tanggalWawancara IS NOT NULL`,
+    ];
+    if (kabupatenKota) {
+        kondisi.push(Prisma.sql`kabupatenKota = ${kabupatenKota}`);
+    }
+    if (startDate) {
+        kondisi.push(Prisma.sql`CONVERT_TZ(tanggalWawancara, '+00:00', '+08:00') >= ${startDate}`);
+    }
+    if (endDate) {
+        kondisi.push(Prisma.sql`CONVERT_TZ(tanggalWawancara, '+00:00', '+08:00') < DATE_ADD(${endDate}, INTERVAL 1 DAY)`);
+    }
+
+    const whereClause = Prisma.join(kondisi, " AND ");
+
+    const rows = await prisma.$queryRaw`
+        SELECT
+            DATE(CONVERT_TZ(tanggalWawancara, '+00:00', '+08:00')) AS tanggal,
+            SUM(CASE WHEN statusWawancara = 'SUDAH_DIWAWANCARA' THEN 1 ELSE 0 END) AS menungguValidasi,
+            SUM(CASE WHEN statusWawancara = 'DISETUJUI' THEN 1 ELSE 0 END) AS disetujui,
+            COUNT(*) AS total
+        FROM warga
+        WHERE ${whereClause}
+        GROUP BY tanggal
+        ORDER BY tanggal DESC
+    `;
+
+    const items = rows.map((r) => ({
+        tanggal: r.tanggal instanceof Date
+            ? r.tanggal.toISOString().slice(0, 10)
+            : String(r.tanggal),
+        menungguValidasi: Number(r.menungguValidasi),
+        disetujui: Number(r.disetujui),
+        total: Number(r.total),
+    }));
+
+    const rekap = items.reduce(
+        (acc, item) => {
+            acc.menungguValidasi += item.menungguValidasi;
+            acc.disetujui += item.disetujui;
+            acc.total += item.total;
+            return acc;
+        },
+        { menungguValidasi: 0, disetujui: 0, total: 0 }
+    );
+
+    return success(res, { items, rekap });
 }
