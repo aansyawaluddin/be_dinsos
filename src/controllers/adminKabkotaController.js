@@ -904,7 +904,7 @@ async function* iterDataSurveiRows(whereWarga, batchSize = 300) {
                     select: {
                         nilaiTeks: true,
                         pertanyaan: { select: { kode: true } },
-                        opsiDipilih: { select: { opsi: { select: { label: true } } } },
+                        opsiDipilih: { select: { opsi: { select: { label: true, kode: true } } } },
                     },
                 },
             },
@@ -917,10 +917,15 @@ async function* iterDataSurveiRows(whereWarga, batchSize = 300) {
 
         for (const w of batch) {
             const jawabanMap = {};
+            const jawabanKodeMap = {};
             w.jawabanWawancara.forEach((j) => {
-                jawabanMap[j.pertanyaan.kode] = j.opsiDipilih.length > 0
+                const kodeSoal = j.pertanyaan.kode;
+                jawabanMap[kodeSoal] = j.opsiDipilih.length > 0
                     ? j.opsiDipilih.map((od) => od.opsi.label).join(", ")
                     : (j.nilaiTeks ?? "-");
+                jawabanKodeMap[kodeSoal] = j.opsiDipilih.length > 0
+                    ? j.opsiDipilih.map((od) => od.opsi.kode).join(",")
+                    : (j.nilaiTeks ?? "");
             });
             yield {
                 nik: w.nik,
@@ -929,6 +934,7 @@ async function* iterDataSurveiRows(whereWarga, batchSize = 300) {
                 namaEnumerator: w.diwawancaraOleh?.nama ?? "-",
                 tanggalWawancara: formatTanggalWawancara(w.tanggalWawancara) ?? "-",
                 jawabanMap,
+                jawabanKodeMap,
             };
         }
 
@@ -948,7 +954,7 @@ export async function exportExcel(req, res) {
     const kabupatenKota = requireRegion(req, res);
     if (!kabupatenKota) return;
 
-    const waktuMulaiExport = new Date(); // kunci snapshot titik waktu export
+    const waktuMulaiExport = new Date();
 
     const { statusWawancara: statusWawancaraRaw } = req.query;
     const isSemuaStatus = statusWawancaraRaw && SEMUA_STATUS_ALIASES.includes(String(statusWawancaraRaw).trim().toLowerCase());
@@ -978,7 +984,9 @@ export async function exportExcel(req, res) {
         select: { kode: true, variabel: true },
     });
 
-    const rowIterator = iterDataSurveiRows(whereWarga);
+    const buatRowIterator = () => iterDataSurveiRows(whereWarga);
+
+    const rowIterator = buatRowIterator();
     const first = await rowIterator.next();
 
     if (first.done) {
@@ -990,6 +998,7 @@ export async function exportExcel(req, res) {
     if (isSemuaStatus) kolomMetaAwal.push("Status");
     kolomMetaAwal.push("NIK", "Nama");
     const headers = [...kolomMetaAwal, ...semuaPertanyaan.map((p) => `${p.kode} - ${p.variabel}`)];
+    const headersSpss = [...kolomMetaAwal, ...semuaPertanyaan.map((p) => p.kode)];
 
     const labelWilayah = mapKabupatenLabel(kabupatenKota) ?? kabupatenKota;
     const statusSlug = isSemuaStatus ? "semua-status" : statusWawancara.toLowerCase();
@@ -998,6 +1007,7 @@ export async function exportExcel(req, res) {
     res.setHeader("Content-Disposition", `attachment; filename="data-survei-${statusSlug}-${labelWilayah}-${Date.now()}.xlsx"`);
 
     const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({ stream: res, useStyles: false, useSharedStrings: false });
+
     const worksheet = workbook.addWorksheet("Data Survei");
     worksheet.columns = headers.map((h, i) => ({ header: h, width: i < kolomMetaAwal.length ? 22 : 28 }));
 
@@ -1018,6 +1028,22 @@ export async function exportExcel(req, res) {
     }
 
     worksheet.commit();
+    const worksheetSpss = workbook.addWorksheet("Jawaban SPSS");
+    worksheetSpss.columns = headersSpss.map((h, i) => ({ header: h, width: i < kolomMetaAwal.length ? 22 : 12 }));
+
+    for await (const r of buatRowIterator()) {
+        worksheetSpss.addRow([
+            r.namaEnumerator,
+            r.tanggalWawancara,
+            ...(isSemuaStatus ? [STATUS_LABEL_EXPORT[r.statusWawancara] ?? r.statusWawancara] : []),
+            r.nik,
+            r.nama,
+            ...semuaPertanyaan.map((p) => r.jawabanKodeMap[p.kode] ?? ""),
+        ]).commit();
+    }
+
+    worksheetSpss.commit();
+
     await workbook.commit();
 }
 

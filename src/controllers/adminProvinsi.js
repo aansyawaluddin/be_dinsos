@@ -1046,7 +1046,7 @@ async function* iterDataSurveiRows(whereWarga, batchSize = 300) {
                     select: {
                         nilaiTeks: true,
                         pertanyaan: { select: { kode: true } },
-                        opsiDipilih: { select: { opsi: { select: { label: true } } } },
+                        opsiDipilih: { select: { opsi: { select: { label: true, kode: true } } } },
                     },
                 },
                 fotoDokumentasi: true,
@@ -1065,10 +1065,15 @@ async function* iterDataSurveiRows(whereWarga, batchSize = 300) {
 
         for (const w of batch) {
             const jawabanMap = {};
+            const jawabanKodeMap = {};
             w.jawabanWawancara.forEach((j) => {
-                jawabanMap[j.pertanyaan.kode] = j.opsiDipilih.length > 0
+                const kodeSoal = j.pertanyaan.kode;
+                jawabanMap[kodeSoal] = j.opsiDipilih.length > 0
                     ? j.opsiDipilih.map((od) => od.opsi.label).join(", ")
                     : (j.nilaiTeks ?? "-");
+                jawabanKodeMap[kodeSoal] = j.opsiDipilih.length > 0
+                    ? j.opsiDipilih.map((od) => od.opsi.kode).join(",")
+                    : (j.nilaiTeks ?? "");
             });
             yield {
                 nik: w.nik,
@@ -1078,6 +1083,7 @@ async function* iterDataSurveiRows(whereWarga, batchSize = 300) {
                 namaEnumerator: w.diwawancaraOleh?.nama ?? "-",
                 tanggalWawancara: formatTanggalWawancara(w.tanggalWawancara) ?? "-",
                 jawabanMap,
+                jawabanKodeMap,
                 fotoPaths: {
                     fotoDokumentasi: w.fotoDokumentasi,
                     fotoRumah: w.fotoRumah,
@@ -1163,10 +1169,10 @@ export async function exportExcel(req, res) {
         select: { kode: true, variabel: true },
     });
 
-    const rowIterator = kabupatenKota
-        ? iterDataSurveiRows({ ...whereDasar, kabupatenKota })
-        : iterSemuaKabupatenRows(whereDasar);
+    const buatRowIterator = () =>
+        kabupatenKota ? iterDataSurveiRows({ ...whereDasar, kabupatenKota }) : iterSemuaKabupatenRows(whereDasar);
 
+    const rowIterator = buatRowIterator();
     const first = await rowIterator.next();
 
     if (first.done) {
@@ -1181,6 +1187,7 @@ export async function exportExcel(req, res) {
     kolomMetaAwal.push("NIK", "Nama", "Kabupaten/Kota");
     const kolomFoto = FOTO_FIELDS_EXPORT.map((f) => f.label);
     const headers = [...kolomMetaAwal, ...kolomFoto, ...semuaPertanyaan.map((p) => `${p.kode} - ${p.variabel}`)];
+    const headersSpss = [...kolomMetaAwal, ...semuaPertanyaan.map((p) => p.kode)];
 
     const statusSlug = isSemuaStatus ? "semua-status" : statusWawancara.toLowerCase();
     const namaFile = kabupatenKota
@@ -1203,10 +1210,21 @@ export async function exportExcel(req, res) {
         ...semuaPertanyaan.map((p) => r.jawabanMap[p.kode] ?? "-"),
     ];
 
+    const buatNilaiBarisSpss = (r) => [
+        r.namaEnumerator,
+        r.tanggalWawancara,
+        ...(isSemuaStatus ? [STATUS_LABEL_EXPORT[r.statusWawancara] ?? r.statusWawancara] : []),
+        r.nik,
+        r.nama,
+        r.kabupatenKota,
+        ...semuaPertanyaan.map((p) => r.jawabanKodeMap[p.kode] ?? ""),
+    ];
+
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", `attachment; filename="${namaFile}"`);
 
     const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({ stream: res, useStyles: true, useSharedStrings: false });
+
     const worksheet = workbook.addWorksheet("Data Survei");
     worksheet.columns = headers.map((h, i) => ({
         header: h,
@@ -1229,8 +1247,22 @@ export async function exportExcel(req, res) {
     }
 
     worksheet.commit();
+    const worksheetSpss = workbook.addWorksheet("Jawaban SPSS");
+    worksheetSpss.columns = headersSpss.map((h, i) => ({
+        header: h,
+        width: i < kolomMetaAwal.length ? 22 : 12,
+    }));
+
+    for await (const r of buatRowIterator()) {
+        worksheetSpss.addRow(buatNilaiBarisSpss(r)).commit();
+    }
+
+    worksheetSpss.commit();
+
     await workbook.commit();
 }
+
+
 export async function exportRekapKehadiran(req, res) {
     const { bulan, tahun, kabupatenKota } = req.query;
 
