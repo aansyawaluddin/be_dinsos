@@ -69,6 +69,17 @@ function logAutoDefaultAngka(wargaId, kode, nilaiAsli) {
     fs.appendFile(path.join(LOG_ROOT, "auto-default-angka.log"), logLine, () => { });
 }
 
+function logPerbaikanAngka(wargaId, kode, nilaiAsli, nilaiDiperbaiki) {
+    const logLine = `${new Date().toISOString()} wargaId=${wargaId} kode=${kode} nilaiAsli=${JSON.stringify(nilaiAsli)} => diperbaiki jadi ${JSON.stringify(nilaiDiperbaiki)}\n`;
+    fs.appendFile(path.join(LOG_ROOT, "perbaikan-titik-angka.log"), logLine, () => { });
+}
+
+function bersihkanTitikGandaAngka(str) {
+    const titikPertama = str.indexOf(".");
+    if (titikPertama === -1) return str;
+    return str.slice(0, titikPertama + 1) + str.slice(titikPertama + 1).replace(/\./g, "");
+}
+
 function logSubmitWawancara({ status, wargaId, surveyorId, message, detail }) {
     const parts = [
         new Date().toISOString(),
@@ -638,8 +649,21 @@ export async function submitWawancara(req, res) {
         let nilai = jawaban[soal.kode];
         const nilaiAsli = nilai;
 
-        if (soal.jenis === "ANGKA" && typeof nilai === "string" && nilai.trim() === ".") {
-            nilai = "";
+        if (soal.jenis === "ANGKA" && typeof nilai === "string") {
+            const nilaiTrim = nilai.trim();
+            const jumlahTitik = (nilaiTrim.match(/\./g) || []).length;
+
+            if (nilaiTrim === ".") {
+                nilai = "";
+            } else if (jumlahTitik > 1) {
+                const dibersihkan = bersihkanTitikGandaAngka(nilaiTrim);
+                if (dibersihkan === "." || dibersihkan === "-" || dibersihkan === "") {
+                    nilai = "";
+                } else {
+                    logPerbaikanAngka(id, soal.kode, nilaiAsli, dibersihkan);
+                    nilai = dibersihkan;
+                }
+            }
         }
 
         const kosong =
