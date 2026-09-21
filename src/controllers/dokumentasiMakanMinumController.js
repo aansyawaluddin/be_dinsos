@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import prisma from "../lib/prisma.js";
 import { success, error } from "../utils/response.js";
+import { dedupeEnumeratorByNama } from "../utils/uangMakan.js";
 
 const UPLOAD_ROOT = path.join(process.cwd(), "uploads");
 const MIN_FOTO_DOKUMENTASI = 4;
@@ -47,14 +48,7 @@ export async function listEnumerator(req, res) {
         orderBy: [{ nama: "asc" }, { id: "asc" }],
     });
 
-    const unik = new Map();
-    for (const u of rows) {
-        if (!unik.has(u.nama)) {
-            unik.set(u.nama, u);
-        }
-    }
-
-    return success(res, { items: Array.from(unik.values()) });
+    return success(res, { items: dedupeEnumeratorByNama(rows) });
 }
 
 export async function listPeriode(req, res) {

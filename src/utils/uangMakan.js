@@ -5,8 +5,39 @@ import { mapKabupatenLabel } from "./wargaMapper.js";
 export const MIN_FOTO_UANG_MAKAN = 4;
 export const MAX_FOTO_UANG_MAKAN = 10;
 
-export function hitungKelengkapan(jumlahFoto) {
-    return jumlahFoto >= MIN_FOTO_UANG_MAKAN;
+export const STATUS_BUKTI_LABEL = {
+    LENGKAP: "Lengkap",
+    BELUM_UPLOAD: "Belum Upload",
+};
+
+const WITA_OFFSET_MS = 8 * 60 * 60 * 1000;
+const BULAN_INDONESIA = [
+    "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+    "Juli", "Agustus", "September", "Oktober", "November", "Desember",
+];
+
+export function formatRentangTanggal(tanggalMulai, tanggalSelesai) {
+    const mulai = new Date(new Date(tanggalMulai).getTime() + WITA_OFFSET_MS);
+    const selesai = new Date(new Date(tanggalSelesai).getTime() + WITA_OFFSET_MS);
+
+    const hariMulai = mulai.getUTCDate();
+    const bulanMulai = BULAN_INDONESIA[mulai.getUTCMonth()];
+    const hariSelesai = selesai.getUTCDate();
+    const bulanSelesai = BULAN_INDONESIA[selesai.getUTCMonth()];
+
+    return bulanMulai === bulanSelesai
+        ? `${hariMulai} - ${hariSelesai} ${bulanSelesai}`
+        : `${hariMulai} ${bulanMulai} - ${hariSelesai} ${bulanSelesai}`;
+}
+
+export function dedupeEnumeratorByNama(rows) {
+    const map = new Map();
+    for (const u of rows) {
+        if (!map.has(u.nama)) {
+            map.set(u.nama, u);
+        }
+    }
+    return Array.from(map.values());
 }
 
 export function buildWhereBukti({ periodeId, enumeratorId, kabupatenKota }) {
@@ -18,30 +49,73 @@ export function buildWhereBukti({ periodeId, enumeratorId, kabupatenKota }) {
 }
 
 export function mapBuktiRow(b) {
-    const jumlahFoto = b.foto?.length ?? 0;
     return {
         id: b.id,
         periode: {
             id: b.periode.id,
             nama: b.periode.nama,
-            tanggalMulai: b.periode.tanggalMulai,
-            tanggalSelesai: b.periode.tanggalSelesai,
+            rentangTanggal: formatRentangTanggal(b.periode.tanggalMulai, b.periode.tanggalSelesai),
         },
         enumerator: {
             id: b.enumerator.id,
             nama: b.enumerator.nama,
             kabupatenKota: b.enumerator.kabupatenKota,
             kabupatenKotaLabel: mapKabupatenLabel(b.enumerator.kabupatenKota) ?? b.enumerator.kabupatenKota,
-            kecamatanTugas: b.enumerator.kecamatanTugas,
-            kelurahanTugas: b.enumerator.kelurahanTugas,
         },
-        jumlahFoto,
+        status: "LENGKAP",
+        statusLabel: STATUS_BUKTI_LABEL.LENGKAP,
+        jumlahFoto: b.foto?.length ?? 0,
         minimalFoto: MIN_FOTO_UANG_MAKAN,
-        lengkap: hitungKelengkapan(jumlahFoto),
         createdAt: b.createdAt,
     };
 }
 
+export async function getRingkasanEnumeratorPeriode({ periodeId, kabupatenKota, status, search }) {
+    const whereEnumerator = { role: "ENUMERATOR", aktif: true };
+    if (kabupatenKota) whereEnumerator.kabupatenKota = kabupatenKota;
+    if (search) whereEnumerator.nama = { contains: search };
+
+    const rows = await prisma.user.findMany({
+        where: whereEnumerator,
+        select: { id: true, nama: true, kabupatenKota: true },
+        orderBy: [{ nama: "asc" }, { id: "asc" }],
+    });
+
+    const enumerators = dedupeEnumeratorByNama(rows);
+
+    const enumeratorIds = enumerators.map((e) => e.id);
+    const buktiList = enumeratorIds.length
+        ? await prisma.buktiUangMakan.findMany({
+            where: { periodeId, enumeratorId: { in: enumeratorIds } },
+            include: { foto: { select: { id: true } } },
+        })
+        : [];
+
+    const buktiMap = new Map(buktiList.map((b) => [b.enumeratorId, b]));
+
+    const semuaItem = enumerators.map((e) => {
+        const bukti = buktiMap.get(e.id);
+        const statusEnum = bukti ? "LENGKAP" : "BELUM_UPLOAD";
+        return {
+            id: e.id,
+            nama: e.nama,
+            kabupatenKota: e.kabupatenKota,
+            kabupatenKotaLabel: mapKabupatenLabel(e.kabupatenKota) ?? e.kabupatenKota,
+            status: statusEnum,
+            statusLabel: STATUS_BUKTI_LABEL[statusEnum],
+            jumlahFoto: bukti?.foto.length ?? 0,
+            buktiId: bukti?.id ?? null,
+        };
+    });
+
+    const totalEnumerator = semuaItem.length;
+    const lengkap = semuaItem.filter((i) => i.status === "LENGKAP").length;
+    const belumUpload = totalEnumerator - lengkap;
+
+    const items = status ? semuaItem.filter((i) => i.status === status) : semuaItem;
+
+    return { ringkasan: { totalEnumerator, lengkap, belumUpload }, items };
+}
 export async function buildRekapUangMakanWorkbook({ kabupatenKota } = {}) {
     const whereEnumerator = { role: "ENUMERATOR" };
     if (kabupatenKota) whereEnumerator.kabupatenKota = kabupatenKota;
@@ -108,10 +182,7 @@ export async function buildRekapUangMakanWorkbook({ kabupatenKota } = {}) {
 
         periodeList.forEach((p, pIdx) => {
             const b = buktiMap[e.id]?.[p.id];
-            const jumlahFoto = b?.foto.length ?? 0;
-            sheet.getCell(currentRow, 4 + pIdx).value = b
-                ? `${jumlahFoto} foto${jumlahFoto >= MIN_FOTO_UANG_MAKAN ? " (Lengkap)" : " (Kurang)"}`
-                : "Belum Upload";
+            sheet.getCell(currentRow, 4 + pIdx).value = b ? `${b.foto.length} foto (Lengkap)` : "Belum Upload";
         });
 
         for (let c = 1; c <= totalKolom; c++) {

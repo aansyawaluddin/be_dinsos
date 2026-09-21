@@ -76,6 +76,7 @@ router.get(
 );
 
 router.get("/uang-makan/periode", authenticate, authorize("ADMIN_PROVINSI"), asyncHandler(ctrl.listPeriodeUangMakanAdmin));
+router.get("/uang-makan/periode/:periodeId/enumerator", authenticate, authorize("ADMIN_PROVINSI"), asyncHandler(ctrl.getEnumeratorPerPeriode));
 router.get("/uang-makan/bukti", authenticate, authorize("ADMIN_PROVINSI"), asyncHandler(ctrl.listBuktiUangMakanProvinsi));
 router.get("/uang-makan/bukti/:id", authenticate, authorize("ADMIN_PROVINSI"), asyncHandler(ctrl.getDetailBuktiUangMakanProvinsi));
 router.get("/uang-makan/export", authenticate, authorize("ADMIN_PROVINSI"), asyncHandler(ctrl.exportRekapUangMakanProvinsi));

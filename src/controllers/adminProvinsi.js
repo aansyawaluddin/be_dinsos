@@ -30,10 +30,11 @@ import {
     clean,
 } from "../utils/wargaMapper.js";
 import {
-    MIN_FOTO_UANG_MAKAN,
     buildWhereBukti,
     mapBuktiRow,
     buildRekapUangMakanWorkbook,
+    formatRentangTanggal,
+    getRingkasanEnumeratorPeriode,
 } from "../utils/uangMakan.js";
 
 const UPLOAD_DIR = path.join(process.cwd(), "uploads");
@@ -1380,22 +1381,44 @@ export async function getStatistikHarianWawancara(req, res) {
 export async function listPeriodeUangMakanAdmin(req, res) {
     const periodeList = await prisma.periodeUangMakan.findMany({
         orderBy: { tanggalMulai: "asc" },
-        include: { buktiUangMakan: { select: { _count: { select: { foto: true } } } } },
+        select: { id: true, nama: true, tanggalMulai: true, tanggalSelesai: true },
     });
-
-    const totalEnumerator = await prisma.user.count({ where: { role: "ENUMERATOR", aktif: true } });
 
     const items = periodeList.map((p) => ({
         id: p.id,
         nama: p.nama,
-        tanggalMulai: p.tanggalMulai,
-        tanggalSelesai: p.tanggalSelesai,
-        totalEnumerator,
-        sudahUpload: p.buktiUangMakan.length,
-        lengkap: p.buktiUangMakan.filter((b) => b._count.foto >= MIN_FOTO_UANG_MAKAN).length,
+        rentangTanggal: formatRentangTanggal(p.tanggalMulai, p.tanggalSelesai),
     }));
 
     return success(res, { items });
+}
+
+export async function getEnumeratorPerPeriode(req, res) {
+    const periodeId = Number(req.params.periodeId);
+    if (!Number.isInteger(periodeId) || periodeId <= 0) {
+        return error(res, "ID periode tidak valid", 400);
+    }
+
+    const periode = await prisma.periodeUangMakan.findUnique({ where: { id: periodeId } });
+    if (!periode) return error(res, "Periode tidak ditemukan", 404);
+
+    const { kabupatenKota, status, search } = req.query;
+    if (status && !["LENGKAP", "BELUM_UPLOAD"].includes(status)) {
+        return error(res, "Status harus LENGKAP atau BELUM_UPLOAD", 400);
+    }
+
+    const { ringkasan, items } = await getRingkasanEnumeratorPeriode({ periodeId, kabupatenKota, status, search });
+
+    return success(res, {
+        periode: {
+            id: periode.id,
+            nama: periode.nama,
+            rentangTanggal: formatRentangTanggal(periode.tanggalMulai, periode.tanggalSelesai),
+        },
+        ringkasan,
+        items,
+        totalDitampilkan: items.length,
+    });
 }
 
 export async function listBuktiUangMakanProvinsi(req, res) {
