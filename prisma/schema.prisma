@@ -68,6 +68,7 @@ model User {
   uploadedWarga     Warga[]
   wargaDiwawancarai Warga[] @relation("WawancaraOleh")
   kendalaDilaporkan KendalaSurvei[]
+  buktiUangMakan    BuktiUangMakan[] @relation("BuktiUangMakanEnumerator")
 
   @@index([role])
   @@index([kabupatenKota])
@@ -211,4 +212,42 @@ model JawabanOpsiDipilih {
 
   @@unique([jawabanId, opsiId])
   @@map("jawaban_opsi_dipilih")
+}
+
+model PeriodeUangMakan {
+  id             Int      @id @default(autoincrement())
+  nama           String   @unique
+  tanggalMulai   DateTime
+  tanggalSelesai DateTime
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  buktiUangMakan BuktiUangMakan[]
+
+  @@map("periode_uang_makan")
+}
+
+model BuktiUangMakan {
+  id           Int      @id @default(autoincrement())
+  periodeId    Int
+  enumeratorId Int
+  createdAt    DateTime @default(now())
+
+  periode    PeriodeUangMakan     @relation(fields: [periodeId], references: [id])
+  enumerator User                 @relation("BuktiUangMakanEnumerator", fields: [enumeratorId], references: [id])
+  foto       FotoBuktiUangMakan[]
+
+  @@unique([periodeId, enumeratorId])
+  @@map("bukti_uang_makan")
+}
+
+model FotoBuktiUangMakan {
+  id        Int      @id @default(autoincrement())
+  buktiId   Int
+  fileName  String
+  createdAt DateTime @default(now())
+
+  bukti BuktiUangMakan @relation(fields: [buktiId], references: [id], onDelete: Cascade)
+
+  @@map("foto_bukti_uang_makan")
 }

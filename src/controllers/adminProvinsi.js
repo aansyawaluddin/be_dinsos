@@ -29,6 +29,12 @@ import {
     formatSkor,
     clean,
 } from "../utils/wargaMapper.js";
+import {
+    MIN_FOTO_UANG_MAKAN,
+    buildWhereBukti,
+    mapBuktiRow,
+    buildRekapUangMakanWorkbook,
+} from "../utils/uangMakan.js";
 
 const UPLOAD_DIR = path.join(process.cwd(), "uploads");
 
@@ -1369,4 +1375,76 @@ export async function getStatistikHarianWawancara(req, res) {
     );
 
     return success(res, { items, rekap });
+}
+
+export async function listPeriodeUangMakanAdmin(req, res) {
+    const periodeList = await prisma.periodeUangMakan.findMany({
+        orderBy: { tanggalMulai: "asc" },
+        include: { buktiUangMakan: { select: { _count: { select: { foto: true } } } } },
+    });
+
+    const totalEnumerator = await prisma.user.count({ where: { role: "ENUMERATOR", aktif: true } });
+
+    const items = periodeList.map((p) => ({
+        id: p.id,
+        nama: p.nama,
+        tanggalMulai: p.tanggalMulai,
+        tanggalSelesai: p.tanggalSelesai,
+        totalEnumerator,
+        sudahUpload: p.buktiUangMakan.length,
+        lengkap: p.buktiUangMakan.filter((b) => b._count.foto >= MIN_FOTO_UANG_MAKAN).length,
+    }));
+
+    return success(res, { items });
+}
+
+export async function listBuktiUangMakanProvinsi(req, res) {
+    const { periodeId, enumeratorId, kabupatenKota } = req.query;
+    const where = buildWhereBukti({ periodeId, enumeratorId, kabupatenKota });
+
+    const rows = await prisma.buktiUangMakan.findMany({
+        where,
+        include: {
+            periode: true,
+            enumerator: { select: { id: true, nama: true, kabupatenKota: true, kecamatanTugas: true, kelurahanTugas: true } },
+            foto: { select: { id: true } },
+        },
+        orderBy: [{ periode: { tanggalMulai: "desc" } }, { enumerator: { nama: "asc" } }],
+    });
+
+    return success(res, { items: rows.map(mapBuktiRow), total: rows.length });
+}
+
+export async function getDetailBuktiUangMakanProvinsi(req, res) {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) return error(res, "ID tidak valid", 400);
+
+    const bukti = await prisma.buktiUangMakan.findUnique({
+        where: { id },
+        include: {
+            periode: true,
+            enumerator: { select: { id: true, nama: true, kabupatenKota: true, kecamatanTugas: true, kelurahanTugas: true } },
+            foto: { orderBy: { createdAt: "asc" } },
+        },
+    });
+
+    if (!bukti) return error(res, "Data bukti tidak ditemukan", 404);
+
+    return success(res, {
+        ...mapBuktiRow(bukti),
+        foto: bukti.foto.map((f) => ({ id: f.id, url: `/uploads/${f.fileName}`, createdAt: f.createdAt })),
+    });
+}
+
+export async function exportRekapUangMakanProvinsi(req, res) {
+    const { kabupatenKota } = req.query;
+    const workbook = await buildRekapUangMakanWorkbook({ kabupatenKota: kabupatenKota || undefined });
+    const buffer = await workbook.xlsx.writeBuffer();
+
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="rekap-uang-makan-${kabupatenKota || "semua-wilayah"}-${Date.now()}.xlsx"`
+    );
+    return res.send(buffer);
 }

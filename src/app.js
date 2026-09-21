@@ -6,6 +6,7 @@ import authRoutes from "./routes/authRoutes.js";
 import adminProvinsiRoutes from "./routes/adminProvinsiRoutes.js";
 import adminKabkotaRoutes from "./routes/adminKabkotaRoutes.js";
 import enumeratorRoutes from "./routes/enumeratorRoutes.js";
+import dokumentasiMakanMinumRoutes from "./routes/dokumentasiMakanMinumRoutes.js";
 import errorHandler from "./middlewares/errorHandler.js";
 
 const app = express();
@@ -15,7 +16,9 @@ app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 const allowedOrigins = [
     "http://localhost:3000",
     "https://beranibersinar.com",
-    "https://www.beranibersinar.com"
+    "https://www.beranibersinar.com",
+    "https://beranibersinar.sultengprov.go.id"
+
 ];
 
 app.use(
@@ -45,6 +48,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/adminProvinsi", adminProvinsiRoutes);
 app.use("/api/adminKabkota", adminKabkotaRoutes);
 app.use("/api/enumerator", enumeratorRoutes);
+app.use("/api/dokumentasi-makan-minum", dokumentasiMakanMinumRoutes);
 
 app.use((req, res) => {
     res.status(404).json({ success: false, message: "Endpoint tidak ditemukan" });
